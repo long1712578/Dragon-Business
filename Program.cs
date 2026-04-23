@@ -34,12 +34,32 @@ builder.Services.AddRedisFlow(redisFlow =>
 // 4. OpenAPI & Scalar
 builder.Services.AddOpenApi();
 
-// 5. Dependency Injection
+// 5. Authentication & Authorization (SSO)
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
+    {
+        options.Authority = builder.Configuration["SSO:Authority"] ?? "https://sso.longdev.store";
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateAudience = false
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("ManagerOnly", policy => policy.RequireRole("admin", "Manager"));
+    options.AddPolicy("StaffOnly", policy => policy.RequireRole("admin", "Manager", "staff", "Staff"));
+});
+
+// 6. Dependency Injection
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
 
 var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Seed & Migrate Database
 using (var scope = app.Services.CreateScope())
@@ -76,18 +96,17 @@ var payments = app.MapGroup("/api/payments").WithTags("Payments");
 
 payments.MapGet("/", async (AppDbContext db) => {
     return await db.Payments.OrderByDescending(p => p.CreatedAt).Take(50).ToListAsync();
-});
-
+}).RequireAuthorization("StaffOnly");
 
 payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paymentService) => {
     var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId);
     return Results.Ok(result);
-});
+}).RequireAuthorization("StaffOnly");
 
 payments.MapGet("/{orderId}", async (string orderId, AppDbContext db) => {
     var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
     return payment != null ? Results.Ok(payment) : Results.NotFound(new { Message = $"Payment {orderId} not found" });
-});
+}).RequireAuthorization("StaffOnly");
 
 payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
     var signature = context.Request.Headers["x-zalopay-signature"].ToString();
@@ -96,7 +115,7 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
     return success 
         ? Results.Ok(new { return_code = 1, return_message = "success" })
         : Results.BadRequest(new { return_code = -1, return_message = "invalid signature or payload" });
-});
+}).AllowAnonymous(); // Webhook không cần SSO token
 
 // Module: Staff
 var staff = app.MapGroup("/api/staff").WithTags("Staff");
@@ -104,12 +123,12 @@ var staff = app.MapGroup("/api/staff").WithTags("Staff");
 staff.MapGet("/", async (StaffService staffService) => {
     var result = await staffService.GetAllStaffWithStatsAsync();
     return Results.Ok(result);
-});
+}).RequireAuthorization("StaffOnly");
 
 staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => {
     var result = await staffService.CreateStaffAsync(req.Name, req.Role);
     return Results.Ok(result);
-});
+}).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
 var dev = app.MapGroup("/api/dev").WithTags("Dev Helper");

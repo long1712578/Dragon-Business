@@ -1,0 +1,72 @@
+name: Build and Deploy Dragon PayHub (AOT)
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'Services/Dragon-Business/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: long1712578/dragon-business
+  K8S_CONFIG_REPO: long1712578/Dragon-k8s-config
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=develop-
+            type=raw,value=latest
+
+      - name: Build and push AOT Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Services/Dragon-Business
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  update-manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout K8s Config Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.K8S_CONFIG_REPO }}
+          token: ${{ secrets.GHCR_TOKEN }}
+          path: k8s-config
+
+      - name: Update image tag
+        run: |
+          IMAGE_TAG="develop-${{ github.sha }}"
+          sed -i "s|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG:0:15}|g" k8s-config/deploy/develop/dragon-business.yaml
+          
+      - name: Commit and push changes
+        run: |
+          cd k8s-config
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore: update dragon-business image to develop-${{ github.sha }}"
+          git push
