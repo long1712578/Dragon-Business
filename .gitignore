@@ -1,0 +1,14 @@
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+*.db
+*.db-shm
+*.db-wal
+appsettings.Development.json
+publish/
+Image-Idea/
