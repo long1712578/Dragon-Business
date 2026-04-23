@@ -135,23 +135,25 @@ app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
     return Results.Ok(new { data = req.Data, mac });
 }).WithTags("Dev Helper");
 
-// Seed Database
+// Seed Database — 100% raw SQL, không dùng LINQ (không tương thích Native AOT)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var conn = db.Database.GetDbConnection();
+    conn.Open();
 
-    // EnsureCreated() không tương thích Native AOT (gọi design-time model)
-    // → Dùng raw SQL để tạo schema thủ công (idempotent)
-    db.Database.ExecuteSqlRaw("""
+    using var cmd = conn.CreateCommand();
+
+    // 1. Tạo bảng (idempotent)
+    cmd.CommandText = """
         CREATE TABLE IF NOT EXISTS "StaffMembers" (
-            "Id"        INTEGER NOT NULL CONSTRAINT "PK_StaffMembers" PRIMARY KEY AUTOINCREMENT,
+            "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "Name"      TEXT    NOT NULL DEFAULT '',
             "Role"      TEXT    NOT NULL DEFAULT '',
             "CreatedAt" TEXT    NOT NULL DEFAULT ''
         );
-
         CREATE TABLE IF NOT EXISTS "Payments" (
-            "OrderId"     TEXT    NOT NULL CONSTRAINT "PK_Payments" PRIMARY KEY,
+            "OrderId"     TEXT    NOT NULL PRIMARY KEY,
             "TransId"     TEXT    NULL,
             "Amount"      TEXT    NOT NULL DEFAULT '0',
             "Description" TEXT    NOT NULL DEFAULT '',
@@ -161,22 +163,29 @@ using (var scope = app.Services.CreateScope())
             "CreatedAt"   TEXT    NOT NULL DEFAULT '',
             "PaidAt"      TEXT    NULL
         );
-
         CREATE TABLE IF NOT EXISTS "Transactions" (
-            "Id"        INTEGER NOT NULL CONSTRAINT "PK_Transactions" PRIMARY KEY AUTOINCREMENT,
+            "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "OrderId"   TEXT    NOT NULL DEFAULT '',
             "Content"   TEXT    NOT NULL DEFAULT '',
             "CreatedAt" TEXT    NOT NULL DEFAULT ''
         );
-        """);
+        """;
+    cmd.ExecuteNonQuery();
 
-    // Seed staff mặc định nếu chưa có
-    if (!db.StaffMembers.Any())
+    // 2. Seed staff nếu chưa có (raw SQL, không dùng LINQ)
+    cmd.CommandText = "SELECT COUNT(*) FROM StaffMembers";
+    var count = (long)(cmd.ExecuteScalar() ?? 0L);
+    if (count == 0)
     {
-        db.StaffMembers.Add(new StaffMember { Name = "Long Pham", Role = "TechLead", CreatedAt = DateTime.UtcNow });
-        db.StaffMembers.Add(new StaffMember { Name = "Dragon Employee", Role = "Barista", CreatedAt = DateTime.UtcNow });
-        db.SaveChanges();
+        cmd.CommandText = """
+            INSERT INTO StaffMembers (Name, Role, CreatedAt) VALUES
+                ('Long Pham',        'TechLead', datetime('now')),
+                ('Dragon Employee',  'Barista',  datetime('now'));
+            """;
+        cmd.ExecuteNonQuery();
     }
+
+    conn.Close();
 }
 
 app.Run();
