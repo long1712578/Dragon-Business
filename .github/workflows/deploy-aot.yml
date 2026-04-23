@@ -41,6 +41,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=develop-
+            type=raw,value=develop-latest
             type=raw,value=latest
 
       - name: Build and push AOT Image
