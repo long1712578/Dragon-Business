@@ -7,10 +7,10 @@ public class StaffMember
 {
     public int Id { get; set; }
     
-    [Required, MaxLength(100)]
+    [Required, StringLength(100)]
     public string Name { get; set; } = string.Empty;
     
-    [MaxLength(50)]
+    [StringLength(50)]
     public string Role { get; set; } = string.Empty;
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

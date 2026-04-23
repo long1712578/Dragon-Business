@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Dragon.Business.Data;
 
 namespace Dragon.Business.Modules.Payments;
@@ -24,7 +23,7 @@ public class ZaloPayAdapter : IPaymentProvider
         var appTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
         var appTransId = $"{DateTime.Now:yyMMdd}_{payment.OrderId}";
         
-        var embedData = JsonSerializer.Serialize(new { redirecturl = "https://dragon.vn/payment-success" });
+        var embedData = """{"redirecturl":"https://dragon.vn/payment-success"}""";
         var items = "[]";
         
         // data = app_id + "|" + app_trans_id + "|" + app_user + "|" + amount + "|" + app_time + "|" + embed_data + "|" + item

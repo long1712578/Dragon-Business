@@ -11,7 +11,7 @@ namespace Dragon.Business.Data.CompiledModels
     public partial class AppDbContextModel
     {
         private AppDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("db8d3812-778c-43ca-ac82-f2305fdfefed"), entityTypeCount: 3)
+            : base(skipDetectChanges: false, modelId: new Guid("ae709170-5513-4458-9a35-6c32b274983e"), entityTypeCount: 3)
         {
         }
 
