@@ -5,22 +5,31 @@ using RedisFlow.Extensions;
 using Dragon.Business.Data;
 using Dragon.Business.Modules.Payments;
 using Dragon.Business.Modules.Staff;
+using Microsoft.AspNetCore.Http.Json;
+using Serilog;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using System.Security.Cryptography;
 using System.Text;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
-// 1. Cấu hình JSON tối ưu cho AOT
-builder.Services.ConfigureHttpJsonOptions(options =>
+// 1. Serilog Enterprise Logging
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
+builder.Host.UseSerilog();
+
+// 2. AOT JSON Context Configuration
+builder.Services.Configure<JsonOptions>(options =>
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
+    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
 });
 
-// 2. Database (SQLite)
+// 3. Infrastructure & DB
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=Data/dragon_business.db"));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=Data/dragon.db"));
 
-// 3. RedisFlow
+// 4. RedisFlow
 builder.Services.AddRedisFlow(redisFlow =>
 {
     redisFlow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
@@ -31,10 +40,10 @@ builder.Services.AddRedisFlow(redisFlow =>
     });
 });
 
-// 4. OpenAPI & Scalar
+// 5. OpenAPI & Scalar
 builder.Services.AddOpenApi();
 
-// 5. Authentication & Authorization (SSO)
+// 6. Authentication & Authorization (SSO)
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -51,29 +60,38 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("StaffOnly", policy => policy.RequireRole("admin", "Manager", "staff", "Staff"));
 });
 
-// 6. Dependency Injection
+// 7. Enterprise Health Checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>()
+    .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
+
+// 8. Dependency Injection
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
 
 var app = builder.Build();
 
+// 9. Global Error Handling
+app.Use(async (context, next) => {
+    try { await next(); }
+    catch (Exception ex) {
+        Log.Error(ex, "Unhandled exception occurred");
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { Message = "An internal server error occurred.", Error = ex.Message });
+    }
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Seed & Migrate Database
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-    
-    if (!db.StaffMembers.Any())
-    {
-        db.StaffMembers.Add(new StaffMember { Name = "Long Pham", Role = "TechLead" });
-        db.StaffMembers.Add(new StaffMember { Name = "Dragon Employee", Role = "Barista" });
-        db.SaveChanges();
-    }
-}
+// Serve Dashboard
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+// Mapping Health Checks
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = r => r.Tags.Contains("ready") });
 
 if (app.Environment.IsDevelopment())
 {
@@ -84,12 +102,6 @@ if (app.Environment.IsDevelopment())
                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
     });
 }
-
-// Host Dashboard
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
-// Minimal APIs - Đã xóa MapGet("/") để nhường chỗ cho Dashboard
 
 // Module: Payments
 var payments = app.MapGroup("/api/payments").WithTags("Payments");
@@ -111,11 +123,8 @@ payments.MapGet("/{orderId}", async (string orderId, AppDbContext db) => {
 payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
     var signature = context.Request.Headers["x-zalopay-signature"].ToString();
     var success = await paymentService.ProcessWebhookAsync("ZaloPay", req.JsonContent, signature, req.OrderId);
-    
-    return success 
-        ? Results.Ok(new { return_code = 1, return_message = "success" })
-        : Results.BadRequest(new { return_code = -1, return_message = "invalid signature or payload" });
-}).AllowAnonymous(); // Webhook không cần SSO token
+    return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
+}).AllowAnonymous();
 
 // Module: Staff
 var staff = app.MapGroup("/api/staff").WithTags("Staff");
@@ -131,16 +140,6 @@ staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => 
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
-var dev = app.MapGroup("/api/dev").WithTags("Dev Helper");
-
-dev.MapPost("/webhook/sign", (WebhookSignRequest req, IConfiguration config) => {
-    var key2 = config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
-    // ZaloPay Webhook data format: {"orderId":"xxx","result":"paid"}
-    var jsonContent = $"{{\"orderId\":\"{req.OrderId}\",\"result\":\"{req.Result}\"}}";
-    
-    using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key2));
-    var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(jsonContent));
-    var mac = BitConverter.ToString(hash).Replace("-", "").ToLower();
     
     return Results.Ok(new { data = jsonContent, mac = mac });
 });
