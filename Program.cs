@@ -24,7 +24,8 @@ builder.Services.Configure<JsonOptions>(options =>
 
 // 3. Infrastructure & DB
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=Data/dragon.db"));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=Data/dragon.db")
+           .UseModel(Dragon.Business.Data.CompiledModels.AppDbContextModel.Instance));
 
 // 4. OpenAPI & Scalar
 builder.Services.AddOpenApi();
@@ -126,9 +127,12 @@ staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => 
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
-app.MapPost("/api/dev/webhook/sign", (SignRequest req, PaymentService paymentService) => {
-    var mac = paymentService.GenerateZaloPayMac(req.Data);
-    return Results.Ok(new { mac });
+app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) => {
+    var key2 = config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
+    using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key2));
+    var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(req.Data));
+    var mac = BitConverter.ToString(hash).Replace("-", "").ToLower();
+    return Results.Ok(new { data = req.Data, mac });
 }).WithTags("Dev Helper");
 
 // Seed Database
