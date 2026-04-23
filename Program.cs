@@ -24,7 +24,7 @@ builder.Services.Configure<JsonOptions>(options =>
 
 // 3. Infrastructure & DB
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=Data/dragon.db")
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=/app/Data/dragon.db")
            .UseModel(Dragon.Business.Data.CompiledModels.AppDbContextModel.Instance));
 
 // 4. OpenAPI & Scalar

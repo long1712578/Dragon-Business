@@ -27,7 +27,6 @@ RUN mkdir -p /app/publish/Data
 # Giai đoạn Final (siêu nhẹ, không có shell)
 FROM mcr.microsoft.com/dotnet/nightly/runtime-deps:9.0-noble-chiseled AS final
 WORKDIR /app
-COPY --from=build /app/publish .
-
-# Chiseled image mặc định chạy với user 1654 (app), thư mục Data đã được copy sang
+# --chown đảm bảo file/thư mục thuộc user app (1654) từ đầu
+COPY --from=build --chown=app:app /app/publish .
 ENTRYPOINT ["./Dragon.Business"]
