@@ -4,12 +4,13 @@ on:
   push:
     branches: [ master ]
     paths:
-      - 'Services/Dragon-Business/**'
+      - '**'
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: long1712578/dragon-business
   K8S_CONFIG_REPO: long1712578/Dragon-k8s-config
+
 
 jobs:
   build:
@@ -41,10 +42,11 @@ jobs:
       - name: Build and push AOT Image
         uses: docker/build-push-action@v5
         with:
-          context: ./Services/Dragon-Business
+          context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
 
   update-manifest:
     needs: build
