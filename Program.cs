@@ -139,7 +139,44 @@ app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+
+    // EnsureCreated() không tương thích Native AOT (gọi design-time model)
+    // → Dùng raw SQL để tạo schema thủ công (idempotent)
+    db.Database.ExecuteSqlRaw("""
+        CREATE TABLE IF NOT EXISTS "StaffMembers" (
+            "Id"        INTEGER NOT NULL CONSTRAINT "PK_StaffMembers" PRIMARY KEY AUTOINCREMENT,
+            "Name"      TEXT    NOT NULL DEFAULT '',
+            "Role"      TEXT    NOT NULL DEFAULT '',
+            "CreatedAt" TEXT    NOT NULL DEFAULT ''
+        );
+
+        CREATE TABLE IF NOT EXISTS "Payments" (
+            "OrderId"     TEXT    NOT NULL CONSTRAINT "PK_Payments" PRIMARY KEY,
+            "TransId"     TEXT    NULL,
+            "Amount"      TEXT    NOT NULL DEFAULT '0',
+            "Description" TEXT    NOT NULL DEFAULT '',
+            "Status"      INTEGER NOT NULL DEFAULT 0,
+            "Provider"    TEXT    NOT NULL DEFAULT 'ZaloPay',
+            "StaffId"     TEXT    NULL,
+            "CreatedAt"   TEXT    NOT NULL DEFAULT '',
+            "PaidAt"      TEXT    NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS "Transactions" (
+            "Id"        INTEGER NOT NULL CONSTRAINT "PK_Transactions" PRIMARY KEY AUTOINCREMENT,
+            "OrderId"   TEXT    NOT NULL DEFAULT '',
+            "Content"   TEXT    NOT NULL DEFAULT '',
+            "CreatedAt" TEXT    NOT NULL DEFAULT ''
+        );
+        """);
+
+    // Seed staff mặc định nếu chưa có
+    if (!db.StaffMembers.Any())
+    {
+        db.StaffMembers.Add(new StaffMember { Name = "Long Pham", Role = "TechLead", CreatedAt = DateTime.UtcNow });
+        db.StaffMembers.Add(new StaffMember { Name = "Dragon Employee", Role = "Barista", CreatedAt = DateTime.UtcNow });
+        db.SaveChanges();
+    }
 }
 
 app.Run();
