@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragon PayHub | Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-[#0f172a] text-white min-h-screen overflow-x-hidden">
+
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-[#1e293b]/50 backdrop-blur-xl border-r border-white/10 z-50 hidden md:block">
+        <div class="p-8">
+            <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                DRAGON PAY
+            </h1>
+        </div>
+        <nav class="mt-8 px-4">
+            <a href="#" class="nav-link active">
+                <i class="fas fa-chart-line mr-3"></i> Dashboard
+            </a>
+            <a href="#" class="nav-link">
+                <i class="fas fa-wallet mr-3"></i> Payments
+            </a>
+            <a href="#" class="nav-link">
+                <i class="fas fa-users mr-3"></i> Staff
+            </a>
+            <a href="#" class="nav-link">
+                <i class="fas fa-cog mr-3"></i> Settings
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="md:ml-64 p-8">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-12">
+            <div>
+                <h2 class="text-3xl font-bold">Good morning, Boss!</h2>
+                <p class="text-gray-400 mt-1">Here's what's happening at your shop today.</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="btnCreatePayment" class="bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2 rounded-full font-semibold hover:shadow-lg hover:shadow-cyan-500/30 transition-all">
+                    <i class="fas fa-plus mr-2"></i> Create QR
+                </button>
+                <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center border-2 border-white/20">
+                    <i class="fas fa-user"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div class="stat-card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Total Revenue</p>
+                        <h3 class="text-3xl font-bold mt-2" id="statRevenue">$0</h3>
+                    </div>
+                    <div class="p-3 bg-cyan-500/20 rounded-xl text-cyan-400">
+                        <i class="fas fa-dollar-sign text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm text-green-400">
+                    <i class="fas fa-arrow-up mr-1"></i> 12% vs yesterday
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Success Payments</p>
+                        <h3 class="text-3xl font-bold mt-2" id="statSuccessCount">0</h3>
+                    </div>
+                    <div class="p-3 bg-purple-500/20 rounded-xl text-purple-400">
+                        <i class="fas fa-check-circle text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm text-purple-400">
+                    <i class="fas fa-sync fa-spin mr-1"></i> Real-time tracking
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-gray-400">Active Staff</p>
+                        <h3 class="text-3xl font-bold mt-2" id="statStaffCount">0</h3>
+                    </div>
+                    <div class="p-3 bg-orange-500/20 rounded-xl text-orange-400">
+                        <i class="fas fa-user-friends text-xl"></i>
+                    </div>
+                </div>
+                <div class="mt-4 flex items-center text-sm text-gray-400">
+                    Currently on duty
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts & Lists -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Recent Payments -->
+            <div class="lg:col-span-2 glass-panel p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h4 class="text-xl font-bold">Recent Transactions</h4>
+                    <a href="#" class="text-cyan-400 text-sm hover:underline">View all</a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="text-gray-400 text-sm border-b border-white/5">
+                                <th class="pb-4">Order ID</th>
+                                <th class="pb-4">Amount</th>
+                                <th class="pb-4">Staff</th>
+                                <th class="pb-4">Status</th>
+                                <th class="pb-4">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentTableBody">
+                            <!-- Data will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Staff Ranking -->
+            <div class="glass-panel p-6">
+                <h4 class="text-xl font-bold mb-6">Top Performers</h4>
+                <div class="space-y-6" id="staffList">
+                    <!-- Data will be injected here -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Payment Modal (Hidden) -->
+    <div id="paymentModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-[#1e293b] w-full max-w-md rounded-2xl p-8 border border-white/10 shadow-2xl relative">
+            <button id="btnCloseModal" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+            <h3 class="text-2xl font-bold mb-6">Create QR Payment</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Amount (VND)</label>
+                    <input type="number" id="inputAmount" placeholder="50000" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Description</label>
+                    <input type="text" id="inputDesc" placeholder="Cafe Latte..." class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Staff Member</label>
+                    <select id="selectStaff" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
+                        <!-- Options will be injected here -->
+                    </select>
+                </div>
+                <button id="btnConfirmPayment" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-3 rounded-lg font-bold mt-4 hover:shadow-lg hover:shadow-cyan-500/30 transition-all">
+                    Generate QR Link
+                </button>
+                <div id="qrResult" class="hidden mt-6 p-4 bg-white/5 rounded-lg border border-white/10 text-center">
+                    <p class="text-sm text-gray-400 mb-2">Scan or Open Link:</p>
+                    <a id="paymentLink" href="#" target="_blank" class="text-cyan-400 break-all hover:underline text-sm font-mono"></a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

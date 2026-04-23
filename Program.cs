@@ -58,14 +58,26 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference();
+    app.MapScalarApiReference(options =>
+    {
+        options.WithTitle("Dragon Business API")
+               .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+    });
 }
 
-// Minimal APIs
-app.MapGet("/", () => new { Message = "Dragon Business API is running!", Version = "1.0.0-AOT" });
+// Host Dashboard
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+// Minimal APIs - Đã xóa MapGet("/") để nhường chỗ cho Dashboard
 
 // Module: Payments
 var payments = app.MapGroup("/api/payments").WithTags("Payments");
+
+payments.MapGet("/", async (AppDbContext db) => {
+    return await db.Payments.OrderByDescending(p => p.CreatedAt).Take(50).ToListAsync();
+});
+
 
 payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paymentService) => {
     var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId);

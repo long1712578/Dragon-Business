@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.nav-link {
+    @apply flex items-center px-6 py-4 text-gray-400 hover:text-white transition-all rounded-xl mb-1;
+}
+
+.nav-link.active {
+    @apply bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-400 border-l-4 border-cyan-500;
+}
+
+.stat-card {
+    @apply bg-[#1e293b]/50 backdrop-blur-md border border-white/10 p-6 rounded-2xl shadow-xl hover:translate-y-[-4px] transition-all;
+}
+
+.glass-panel {
+    @apply bg-[#1e293b]/30 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.stat-card, .glass-panel {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+.badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.badge-paid { @apply bg-green-500/20 text-green-400; }
+.badge-pending { @apply bg-orange-500/20 text-orange-400; }
+.badge-created { @apply bg-cyan-500/20 text-cyan-400; }
+.badge-failed { @apply bg-red-500/20 text-red-400; }
