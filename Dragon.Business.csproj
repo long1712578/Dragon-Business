@@ -6,7 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>Dragon.Business</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);External\**</DefaultItemExcludes>
   </PropertyGroup>
+
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PublishAot>true</PublishAot>
