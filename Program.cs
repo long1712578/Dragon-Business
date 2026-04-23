@@ -151,11 +151,13 @@ app.Run();
 [JsonSerializable(typeof(StaffCreateRequest))]
 [JsonSerializable(typeof(WebhookRequest))]
 [JsonSerializable(typeof(SignRequest))]
+[JsonSerializable(typeof(PaymentStatus))]
 [JsonSerializable(typeof(object))]
 internal partial class AppJsonContext : JsonSerializerContext { }
 
-public record PaymentCreateRequest(long Amount, string Desc, string StaffId);
+public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
 public record StaffCreateRequest(string Name, string Role);
 public record WebhookRequest(string JsonContent, string OrderId);
 public record SignRequest(string Data);
 public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
+

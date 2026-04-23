@@ -14,10 +14,10 @@ public class StaffService
         _logger = logger;
     }
 
-    public async Task<List<StaffMemberDto>> GetAllStaffWithStatsAsync()
+    public async Task<List<StaffMemberWithStats>> GetAllStaffWithStatsAsync()
     {
         var staff = await _db.StaffMembers.ToListAsync();
-        var result = new List<StaffMemberDto>();
+        var result = new List<StaffMemberWithStats>();
 
         foreach (var s in staff)
         {
@@ -25,7 +25,7 @@ public class StaffService
                 .Where(p => p.StaffId == s.Id.ToString() && p.Status == PaymentStatus.Paid)
                 .SumAsync(p => p.Amount);
 
-            result.Add(new StaffMemberDto(s.Id, s.Name, s.Role, totalTips));
+            result.Add(new StaffMemberWithStats(s.Id, s.Name, s.Role, totalTips));
         }
 
         return result;
@@ -41,5 +41,3 @@ public class StaffService
         return staff;
     }
 }
-
-public record StaffMemberDto(int Id, string Name, string Role, decimal TotalTips);

@@ -1,7 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dragon.Business.Data;
+
+public record StaffMemberWithStats(int Id, string Name, string Role, decimal TotalTips);
 
 public class StaffMember
 {
