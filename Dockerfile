@@ -21,15 +21,13 @@ COPY . .
 # Build Native AOT
 RUN dotnet publish "Dragon.Business.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:PublishAot=true
 
+# Tạo thư mục Data ngay tại giai đoạn Build (có shell)
+RUN mkdir -p /app/publish/Data
 
-# Giai đoạn Final (siêu nhẹ)
+# Giai đoạn Final (siêu nhẹ, không có shell)
 FROM mcr.microsoft.com/dotnet/nightly/runtime-deps:9.0-noble-chiseled AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Tạo thư mục Data cho SQLite
-USER root
-RUN mkdir -p /app/Data && chown -R 1654:1654 /app/Data
-USER 1654
-
+# Chiseled image mặc định chạy với user 1654 (app), thư mục Data đã được copy sang
 ENTRYPOINT ["./Dragon.Business"]
