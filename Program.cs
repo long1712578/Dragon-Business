@@ -1,15 +1,12 @@
 using System.Text.Json.Serialization;
-using Microsoft.EntityFrameworkCore;
-using Scalar.AspNetCore;
-using RedisFlow.Extensions;
 using Dragon.Business.Data;
 using Dragon.Business.Modules.Payments;
 using Dragon.Business.Modules.Staff;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Json;
+using Scalar.AspNetCore;
 using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using System.Security.Cryptography;
-using System.Text;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -29,21 +26,10 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=Data/dragon.db"));
 
-// 4. RedisFlow
-builder.Services.AddRedisFlow(redisFlow =>
-{
-    redisFlow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
-    redisFlow.UseJsonSerialization();
-    
-    redisFlow.AddProducer("payments", producer => {
-        producer.WithMaxLength(1000).WithApproximateTrimming(true);
-    });
-});
-
-// 5. OpenAPI & Scalar
+// 4. OpenAPI & Scalar
 builder.Services.AddOpenApi();
 
-// 6. Authentication & Authorization (SSO)
+// 5. Authentication & Authorization (SSO)
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
@@ -60,19 +46,19 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("StaffOnly", policy => policy.RequireRole("admin", "Manager", "staff", "Staff"));
 });
 
-// 7. Enterprise Health Checks
+// 6. Enterprise Health Checks
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<AppDbContext>()
     .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
 
-// 8. Dependency Injection
+// 7. Dependency Injection
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
 
 var app = builder.Build();
 
-// 9. Global Error Handling
+// 8. Global Error Handling
 app.Use(async (context, next) => {
     try { await next(); }
     catch (Exception ex) {
@@ -140,44 +126,36 @@ staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => 
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
-    
-    return Results.Ok(new { data = jsonContent, mac = mac });
-});
+app.MapPost("/api/dev/webhook/sign", (SignRequest req, PaymentService paymentService) => {
+    var mac = paymentService.GenerateZaloPayMac(req.Data);
+    return Results.Ok(new { mac });
+}).WithTags("Dev Helper");
+
+// Seed Database
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
 
 app.Run();
 
-// -------------------------------------------------------------------------
-// Boilerplate cho Native AOT & DTOs
-// -------------------------------------------------------------------------
-
-[JsonSerializable(typeof(object))]
-[JsonSerializable(typeof(string))]
-[JsonSerializable(typeof(decimal))]
-[JsonSerializable(typeof(DateTime))]
-[JsonSerializable(typeof(StaffMember))]
-[JsonSerializable(typeof(StaffMember[]))]
-[JsonSerializable(typeof(StaffMemberDto))]
-[JsonSerializable(typeof(List<StaffMemberDto>))]
+// AOT-Friendly JSON Source Generation
 [JsonSerializable(typeof(Payment))]
-[JsonSerializable(typeof(PaymentStatus))]
-[JsonSerializable(typeof(Transaction))]
-[JsonSerializable(typeof(PaymentRequestResponse))]
+[JsonSerializable(typeof(List<Payment>))]
+[JsonSerializable(typeof(StaffMember))]
+[JsonSerializable(typeof(List<StaffMember>))]
+[JsonSerializable(typeof(StaffMemberWithStats))]
+[JsonSerializable(typeof(List<StaffMemberWithStats>))]
 [JsonSerializable(typeof(PaymentCreateRequest))]
 [JsonSerializable(typeof(StaffCreateRequest))]
 [JsonSerializable(typeof(WebhookRequest))]
-[JsonSerializable(typeof(WebhookSignRequest))]
-internal partial class AppJsonSerializerContext : JsonSerializerContext { }
+[JsonSerializable(typeof(SignRequest))]
+[JsonSerializable(typeof(object))]
+internal partial class AppJsonContext : JsonSerializerContext { }
 
-public class AppDbContext : DbContext
-{
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
-    public DbSet<Payment> Payments => Set<Payment>();
-    public DbSet<Transaction> Transactions => Set<Transaction>();
-}
-
-public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
-public record PaymentCreateRequest(decimal Amount, string Desc, string? StaffId);
+public record PaymentCreateRequest(long Amount, string Desc, string StaffId);
 public record StaffCreateRequest(string Name, string Role);
 public record WebhookRequest(string JsonContent, string OrderId);
-public record WebhookSignRequest(string OrderId, string Result);
+public record SignRequest(string Data);
+public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);

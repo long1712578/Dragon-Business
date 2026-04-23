@@ -54,3 +54,12 @@ public class Transaction
     public string Content { get; set; } = string.Empty; // Log thô từ webhook
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+public class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
+{
+    public AppDbContext(Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext> options) : base(options) { }
+    public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+}
+
