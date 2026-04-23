@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using RedisFlow.Extensions;
 using Dragon.Business.Data;
+using Dragon.Business.Data.CompiledModels;
 using Dragon.Business.Modules.Payments;
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -13,16 +14,22 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 
-// 2. Database (SQLite)
+// 2. Database (SQLite) — UseModel() để tương thích Native AOT
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=Data/dragon_business.db"));
+    options.UseSqlite("Data Source=Data/dragon_business.db")
+           .UseModel(AppDbContextModel.Instance));
 
 // 3. RedisFlow
 builder.Services.AddRedisFlow(redisFlow =>
 {
     redisFlow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
     redisFlow.UseJsonSerialization();
+    
+    redisFlow.AddProducer("payments", producer => {
+        producer.WithMaxLength(1000).WithApproximateTrimming(true);
+    });
 });
+
 
 // 4. OpenAPI & Scalar
 builder.Services.AddOpenApi();
@@ -38,7 +45,15 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    
+    if (!db.StaffMembers.Any())
+    {
+        db.StaffMembers.Add(new StaffMember { Name = "Long Pham", Role = "TechLead" });
+        db.StaffMembers.Add(new StaffMember { Name = "Dragon Employee", Role = "Barista" });
+        db.SaveChanges();
+    }
 }
+
 
 if (app.Environment.IsDevelopment())
 {
@@ -78,10 +93,15 @@ app.Run();
 [JsonSerializable(typeof(DateTime))]
 [JsonSerializable(typeof(StaffMember))]
 [JsonSerializable(typeof(StaffMember[]))]
+[JsonSerializable(typeof(List<StaffMember>))]
 [JsonSerializable(typeof(Payment))]
+[JsonSerializable(typeof(Payment[]))]
+[JsonSerializable(typeof(List<Payment>))]
 [JsonSerializable(typeof(PaymentStatus))]
 [JsonSerializable(typeof(Transaction))]
+[JsonSerializable(typeof(List<Transaction>))]
 [JsonSerializable(typeof(PaymentRequestResponse))]
+[JsonSerializable(typeof(PaymentSuccessEvent))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext { }
 
 public class AppDbContext : DbContext

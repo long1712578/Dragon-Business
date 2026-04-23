@@ -1,5 +1,6 @@
 using Dragon.Business.Data;
 using Microsoft.EntityFrameworkCore;
+using RedisFlow.Abstractions;
 
 namespace Dragon.Business.Modules.Payments;
 
@@ -8,12 +9,18 @@ public class PaymentService
     private readonly AppDbContext _db;
     private readonly IEnumerable<IPaymentProvider> _providers;
     private readonly ILogger<PaymentService> _logger;
+    private readonly IStreamProducer _producer;
 
-    public PaymentService(AppDbContext db, IEnumerable<IPaymentProvider> providers, ILogger<PaymentService> logger)
+    public PaymentService(
+        AppDbContext db, 
+        IEnumerable<IPaymentProvider> providers, 
+        ILogger<PaymentService> logger,
+        IStreamProducer producer)
     {
         _db = db;
         _providers = providers;
         _logger = logger;
+        _producer = producer;
     }
 
     public async Task<PaymentRequestResponse> CreatePaymentRequestAsync(decimal amount, string description, string? staffId = null, string providerName = "ZaloPay")
@@ -43,7 +50,7 @@ public class PaymentService
         return new PaymentRequestResponse(orderId, url, providerName);
     }
 
-    public async Task<bool> ProcessWebhookAsync(string providerName, string jsonContent, string signature)
+    public async Task<bool> ProcessWebhookAsync(string providerName, string jsonContent, string signature, string orderId)
     {
         var provider = _providers.FirstOrDefault(p => p.ProviderName == providerName);
         if (provider == null || !await provider.VerifyWebhookAsync(jsonContent, signature))
@@ -52,10 +59,6 @@ public class PaymentService
             return false;
         }
 
-        // Logic parse jsonContent tùy theo provider để lấy app_trans_id/order_id
-        // Giả lập lấy được orderId
-        var orderId = "extracted_from_json"; 
-        
         var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
         if (payment != null && payment.Status != PaymentStatus.Paid)
         {
@@ -69,10 +72,19 @@ public class PaymentService
             
             await _db.SaveChangesAsync();
             
-            // TODO: Bắn event vào RedisFlow ở đây
-            _logger.LogInformation("Payment {OrderId} marked as PAID", orderId);
+            // Bắn event vào RedisFlow
+            await _producer.ProduceAsync(new PaymentSuccessEvent(
+                payment.OrderId,
+                payment.Amount,
+                payment.StaffId,
+                payment.PaidAt.Value,
+                payment.Provider
+            ));
+            
+            _logger.LogInformation("Payment {OrderId} marked as PAID and event produced", orderId);
         }
 
         return true;
     }
 }
+
