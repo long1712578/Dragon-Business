@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GHCR_TOKEN }} # Cần token có quyền đọc repo khác
+
 
       - name: Login to GHCR
         uses: docker/login-action@v3

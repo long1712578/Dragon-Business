@@ -9,18 +9,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 
 # Copy các project file
-COPY ["Services/Dragon-Business/Dragon.Business.csproj", "Services/Dragon-Business/"]
-COPY ["Services/RedisFlow/src/RedisFlow/RedisFlow.csproj", "Services/RedisFlow/src/RedisFlow/"]
+COPY ["Dragon.Business.csproj", "./"]
+COPY ["External/RedisFlow/src/RedisFlow/RedisFlow.csproj", "External/RedisFlow/src/RedisFlow/"]
 
 # Restore
-RUN dotnet restore "Services/Dragon-Business/Dragon.Business.csproj"
+RUN dotnet restore "Dragon.Business.csproj"
 
 # Copy toàn bộ source code
 COPY . .
 
 # Build Native AOT
-WORKDIR "/src/Services/Dragon-Business"
 RUN dotnet publish "Dragon.Business.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:PublishAot=true
+
 
 # Giai đoạn Final (siêu nhẹ)
 FROM mcr.microsoft.com/dotnet/nightly/runtime-deps:9.0-noble-chiseled AS final
