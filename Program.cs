@@ -73,9 +73,26 @@ app.Use(async (context, next) => {
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Serve Dashboard
+// Serve Dashboard với Cache-Control để tự động update code mới (Cache Busting)
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Với index.html và các file .js, .css -> Luôn yêu cầu trình duyệt check bản mới (revalidate)
+        if (ctx.File.Name.EndsWith(".html") || ctx.File.Name.EndsWith(".js") || ctx.File.Name.EndsWith(".css"))
+        {
+            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+            ctx.Context.Response.Headers.Append("Expires", "0");
+        }
+        else
+        {
+            // Các file static khác (ảnh, font) có thể cache lâu hơn (7 ngày)
+            ctx.Context.Response.Headers.Append("Cache-Control", "public, max-age=604800");
+        }
+    }
+});
 
 // Mapping Health Checks
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });

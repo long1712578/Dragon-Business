@@ -151,13 +151,45 @@ const UI = {
     },
 
     showView(viewName) {
+        // Native AOT optimization: Minimal DOM manipulation
         document.querySelectorAll('.view-section').forEach(v => v.classList.add('hidden'));
         const target = this.el(`view${viewName}`);
-        if (target) target.classList.remove('hidden');
+        if (target) {
+            target.classList.remove('hidden');
+            target.classList.add('fade-in-up');
+        }
 
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(l => {
+            l.classList.remove('active', 'bg-white/10', 'text-white');
+            l.classList.add('text-gray-400');
+        });
         const nav = this.el(`nav${viewName}`);
-        if (nav) nav.classList.add('active');
+        if (nav) {
+            nav.classList.add('active', 'bg-white/10', 'text-white');
+            nav.classList.remove('text-gray-400');
+        }
+
+        // Close mobile menu if open
+        const sidebar = document.querySelector('aside');
+        if (window.innerWidth < 768) {
+            sidebar.classList.add('hidden');
+        }
+    },
+
+    initMobileMenu() {
+        const btn = this.el('btnMobileMenu');
+        const sidebar = document.querySelector('aside');
+        if (btn && sidebar) {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                sidebar.classList.toggle('hidden');
+                sidebar.classList.add('z-[110]', 'fixed', 'inset-y-0', 'left-0', 'w-64', 'bg-[#0f172a]', 'shadow-2xl');
+            };
+            document.addEventListener('click', () => {
+                if (window.innerWidth < 768) sidebar.classList.add('hidden');
+            });
+            sidebar.onclick = (e) => e.stopPropagation();
+        }
     },
 
     esc: (str) => String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),
@@ -252,6 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Init
+    UI.initMobileMenu();
     const token = AuthService.getToken();
     if (token) {
         Store.setState({ isLoggedIn: true, user: { name: localStorage.getItem(CONFIG.STORAGE_KEYS.USER), role: AuthService.getRoles()[0] } });

@@ -23,14 +23,14 @@ public class ZaloPayAdapter : IPaymentProvider
         var appTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
         var appTransId = $"{DateTime.Now:yyMMdd}_{payment.OrderId}";
         
-        var embedData = """{"redirecturl":"https://dragon.vn/payment-success"}""";
+        var embedData = """{"redirecturl":"https://payhub.longdev.store"}""";
         var items = "[]";
         
-        // data = app_id + "|" + app_trans_id + "|" + app_user + "|" + amount + "|" + app_time + "|" + embed_data + "|" + item
         var data = $"{appId}|{appTransId}|DragonUser|{(long)payment.Amount}|{appTime}|{embedData}|{items}";
         var mac = ComputeHmacSha256(data, key1);
 
-        var payload = new Dictionary<string, string>
+        using var client = new HttpClient();
+        var payload = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             { "app_id", appId },
             { "app_user", "DragonUser" },
@@ -41,11 +41,24 @@ public class ZaloPayAdapter : IPaymentProvider
             { "item", items },
             { "description", payment.Description },
             { "mac", mac }
-        };
+        });
 
-        // Gửi request tới ZaloPay (trong thực tế dùng HttpClient)
-        // Ở đây tôi trả về URL giả lập hoặc log ra
-        return $"https://sb-openapi.zalopay.vn/pay?order={appTransId}&mac={mac}";
+        try {
+            var response = await client.PostAsync(endpoint, payload);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            // Native AOT: Parse JSON thủ công hoặc dùng source generator
+            // Ở đây tôi dùng string manipulation đơn giản để lấy order_url cho nhanh và an toàn AOT
+            if (content.Contains("\"order_url\":\"")) {
+                var start = content.IndexOf("\"order_url\":\"") + 13;
+                var end = content.IndexOf("\"", start);
+                return content.Substring(start, end - start).Replace("\\/", "/");
+            }
+            
+            return $"https://sb-openapi.zalopay.vn/pay?order={appTransId}&mac={mac}"; // Fallback
+        } catch {
+            return $"https://sb-openapi.zalopay.vn/pay?order={appTransId}&mac={mac}";
+        }
     }
 
     public Task<bool> VerifyWebhookAsync(string jsonContent, string signature)

@@ -119,18 +119,18 @@
                 DRAGON PAY
             </h1>
         </div>
-        <nav class="mt-8 px-4">
+        <nav class="mt-8 px-4 space-y-2">
             <a href="#" id="navDashboard" class="nav-link active">
-                <i class="fas fa-chart-line mr-3"></i> Dashboard
+                <i class="fas fa-chart-line w-6"></i> Dashboard
             </a>
             <a href="#" id="navPayments" class="nav-link">
-                <i class="fas fa-wallet mr-3"></i> Payments
+                <i class="fas fa-wallet w-6"></i> Payments
             </a>
             <a href="#" id="navStaff" class="nav-link">
-                <i class="fas fa-users mr-3"></i> Staff
+                <i class="fas fa-users w-6"></i> Staff
             </a>
             <a href="#" id="navSettings" class="nav-link">
-                <i class="fas fa-cog mr-3"></i> Settings
+                <i class="fas fa-cog w-6"></i> Settings
             </a>
         </nav>
     </aside>
@@ -138,10 +138,16 @@
     <!-- Main Content -->
     <main class="md:ml-64 p-8">
         <!-- Header -->
-        <header class="flex justify-between items-center mb-12">
-            <div>
-                <h2 class="text-3xl font-bold">Good morning, Boss!</h2>
-                <p class="text-gray-400 mt-1">Here's what's happening at your shop today.</p>
+        <header class="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+            <div class="flex justify-between items-center w-full md:w-auto">
+                <div class="md:hidden flex items-center">
+                    <button id="btnMobileMenu" class="text-2xl text-gray-400 mr-4"><i class="fas fa-bars"></i></button>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">DRAGON</h1>
+                </div>
+                <div class="hidden md:block">
+                    <h2 class="text-3xl font-bold">Good morning, Boss!</h2>
+                    <p class="text-gray-400 mt-1">Here's what's happening at your shop today.</p>
+                </div>
             </div>
             <div class="flex items-center space-x-4">
                 <div class="hidden md:flex flex-col items-end mr-2">
@@ -386,6 +392,6 @@
          → const/let không bao giờ leak ra window → FIX PERMANENT cho bug 'already declared'
          → Defer tự động → DOM luôn sẵn sàng khi script chạy
          → Browser chỉ execute script này đúng 1 lần duy nhất -->
-    <script type="module" src="js/dashboard.js?v=1.0.2"></script>
+    <script type="module" src="js/dashboard.js?v=1.0.3"></script>
 </body>
 </html>
