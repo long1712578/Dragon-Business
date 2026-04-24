@@ -205,22 +205,25 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
     return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
 }).AllowAnonymous();
 
-// Admin: xóa payment
-payments.MapDelete("/{orderId}", async (string orderId, AppDbContext db) => {
-    var payment = await db.Payments.FindAsync(orderId);
-    if (payment == null) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
-    db.Payments.Remove(payment);
-    await db.SaveChangesAsync();
-    return Results.Ok(new ErrorResponse("Deleted", orderId));
-}).RequireAuthorization("ManagerOnly");
-
 // Admin: cập nhật trạng thái payment thủ công
 payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest req, AppDbContext db) => {
-    var payment = await db.Payments.FindAsync(orderId);
-    if (payment == null) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
-    payment.Status = (PaymentStatus)req.Status;
-    await db.SaveChangesAsync();
-    return Results.Ok(payment);
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+
+    // Check exists first
+    using var cmdCheck = conn.CreateCommand();
+    cmdCheck.CommandText = "SELECT COUNT(1) FROM Payments WHERE OrderId = @id";
+    var pCheckId = cmdCheck.CreateParameter(); pCheckId.ParameterName = "@id"; pCheckId.Value = orderId; cmdCheck.Parameters.Add(pCheckId);
+    var count = Convert.ToInt64(await cmdCheck.ExecuteScalarAsync());
+    if (count == 0) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
+
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "UPDATE Payments SET Status = @status WHERE OrderId = @id";
+    var pStatus = cmd.CreateParameter(); pStatus.ParameterName = "@status"; pStatus.Value = req.Status; cmd.Parameters.Add(pStatus);
+    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmd.Parameters.Add(pId);
+    await cmd.ExecuteNonQueryAsync();
+
+    return Results.Ok(new { OrderId = orderId, Status = req.Status });
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Staff
