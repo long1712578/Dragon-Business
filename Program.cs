@@ -295,19 +295,26 @@ app.Run();
 [JsonSerializable(typeof(object))]
 internal partial class AppJsonContext : JsonSerializerContext { }
 
-// Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT
+// Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
 public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
 {
-    private readonly System.Text.Json.JsonSerializerOptions _options;
-    public AotRedisSerializer() {
-        _options = new System.Text.Json.JsonSerializerOptions {
-            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-        };
-        _options.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
+    public byte[] Serialize<T>(T obj)
+    {
+        var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
+        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)typeInfo);
     }
-    public byte[] Serialize<T>(T obj) => System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, _options);
-    public T Deserialize<T>(byte[] data) => System.Text.Json.JsonSerializer.Deserialize<T>(data, _options)!;
-    public object Deserialize(byte[] data, Type type) => System.Text.Json.JsonSerializer.Deserialize(data, type, _options)!;
+
+    public T Deserialize<T>(byte[] data)
+    {
+        var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
+        return (T)System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
+    }
+
+    public object Deserialize(byte[] data, Type type)
+    {
+        var typeInfo = AppJsonContext.Default.GetTypeInfo(type) ?? throw new NotSupportedException($"Type {type} not in AOT Context");
+        return System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
+    }
 }
 
 public record ErrorResponse(string Message, string Error);
