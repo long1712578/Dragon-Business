@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Scalar.AspNetCore;
 using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using RedisFlow.Extensions;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -57,6 +58,15 @@ builder.Services.AddHealthChecks()
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
+
+// 8. RedisFlow Event Streaming Configuration
+builder.Services.AddRedisFlow(flow =>
+{
+    flow.WithRedis(builder.Configuration["Redis"] ?? "localhost:6379")
+        .AddProducer("payments")
+        .UseJsonSerialization();
+});
+
 builder.Services.AddSignalR().AddJsonProtocol(options => {
     options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, Dragon.Business.Hubs.HubJsonContext.Default);
 });
