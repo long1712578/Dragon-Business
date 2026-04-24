@@ -20,8 +20,11 @@ public class ZaloPayAdapter : IPaymentProvider
         var key1 = _config["ZaloPay:Key1"] ?? "9ph3199y9th6883v69h761b7z6n83pzed";
         var endpoint = _config["ZaloPay:Endpoint"] ?? "https://sb-openapi.zalopay.vn/v2/create";
 
+        var vnNow = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7));
         var appTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var appTransId = $"{DateTime.Now:yyMMdd}_{payment.OrderId}";
+        // app_trans_id phải dùng ngày Việt Nam (UTC+7), không dùng UTC
+        // Server K3s chạy UTC, nếu dùng DateTime.Now/UtcNow sẽ sai ngày → ZaloPay reject
+        var appTransId = $"{vnNow:yyMMdd}_{payment.OrderId}";
         var appUser = "DragonPayUser";
         var amount = ((long)payment.Amount).ToString();
         var embedData = "{}";
