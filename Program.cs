@@ -158,10 +158,46 @@ payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paym
 }).RequireAuthorization("StaffOnly");
 
 payments.MapGet("/{orderId}", async (string orderId, AppDbContext db) => {
-    // Native AOT: FindAsync dùng primary key mapping là an toàn nhất
-    var payment = await db.Payments.FindAsync(orderId);
-    return payment != null ? Results.Ok(payment) : Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
+    var conn = db.Database.GetDbConnection();
+    await conn.OpenAsync();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt FROM Payments WHERE OrderId = @id";
+    var pId = cmd.CreateParameter();
+    pId.ParameterName = "@id";
+    pId.Value = orderId;
+    cmd.Parameters.Add(pId);
+    
+    using var reader = await cmd.ExecuteReaderAsync();
+    if (await reader.ReadAsync())
+    {
+        return Results.Ok(new Payment {
+            OrderId = reader.GetString(0),
+            Amount = reader.GetDecimal(1),
+            Description = reader.GetString(2),
+            Status = (PaymentStatus)reader.GetInt32(3),
+            Provider = reader.GetString(4),
+            StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedAt = DateTime.Parse(reader.GetString(6))
+        });
+    }
+    return Results.NotFound(new ErrorResponse("Payment not found", orderId));
 }).RequireAuthorization("StaffOnly");
+
+payments.MapDelete("/{orderId}", async (string orderId, AppDbContext db) => {
+    var conn = db.Database.GetDbConnection();
+    await conn.OpenAsync();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "DELETE FROM Payments WHERE OrderId = @id";
+    var pId = cmd.CreateParameter();
+    pId.ParameterName = "@id";
+    pId.Value = orderId;
+    cmd.Parameters.Add(pId);
+    
+    var affected = await cmd.ExecuteNonQueryAsync();
+    return affected > 0 
+        ? Results.Ok(new DeleteResponse("Payment deleted", orderId)) 
+        : Results.NotFound(new ErrorResponse("Payment not found", orderId));
+}).RequireAuthorization("ManagerOnly");
 
 payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
     var signature = context.Request.Headers["x-zalopay-signature"].ToString();
@@ -301,6 +337,8 @@ namespace Dragon.Business
     // Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
     public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
     {
+        public AotRedisSerializer() { } // Cần constructor public cho DI
+
         public byte[] Serialize<T>(T obj)
         {
             var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
