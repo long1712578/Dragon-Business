@@ -43,8 +43,9 @@ builder.Services.AddAuthentication("Bearer")
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("ManagerOnly", policy => policy.RequireRole("admin", "Manager"));
-    options.AddPolicy("StaffOnly", policy => policy.RequireRole("admin", "Manager", "staff", "Staff"));
+    // Roles khớp với SSO seed: 'admin' và 'employee'
+    options.AddPolicy("ManagerOnly", policy => policy.RequireRole("admin"));
+    options.AddPolicy("StaffOnly",   policy => policy.RequireRole("admin", "employee"));
 });
 
 // 6. Enterprise Health Checks
@@ -113,6 +114,24 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
     return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
 }).AllowAnonymous();
 
+// Admin: xóa payment
+payments.MapDelete("/{orderId}", async (string orderId, AppDbContext db) => {
+    var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
+    if (payment == null) return Results.NotFound(new { Message = $"Payment {orderId} not found" });
+    db.Payments.Remove(payment);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { Message = $"Payment {orderId} deleted" });
+}).RequireAuthorization("ManagerOnly");
+
+// Admin: cập nhật trạng thái payment thủ công
+payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest req, AppDbContext db) => {
+    var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
+    if (payment == null) return Results.NotFound(new { Message = $"Payment {orderId} not found" });
+    payment.Status = (PaymentStatus)req.Status;
+    await db.SaveChangesAsync();
+    return Results.Ok(payment);
+}).RequireAuthorization("ManagerOnly");
+
 // Module: Staff
 var staff = app.MapGroup("/api/staff").WithTags("Staff");
 
@@ -124,6 +143,15 @@ staff.MapGet("/", async (StaffService staffService) => {
 staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => {
     var result = await staffService.CreateStaffAsync(req.Name, req.Role);
     return Results.Ok(result);
+}).RequireAuthorization("ManagerOnly");
+
+// Admin: xóa staff
+staff.MapDelete("/{id:int}", async (int id, AppDbContext db) => {
+    var member = await db.StaffMembers.FindAsync(id);
+    if (member == null) return Results.NotFound(new { Message = $"Staff {id} not found" });
+    db.StaffMembers.Remove(member);
+    await db.SaveChangesAsync();
+    return Results.Ok(new { Message = $"Staff {id} deleted" });
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
@@ -198,6 +226,7 @@ app.Run();
 [JsonSerializable(typeof(StaffMemberWithStats))]
 [JsonSerializable(typeof(List<StaffMemberWithStats>))]
 [JsonSerializable(typeof(PaymentCreateRequest))]
+[JsonSerializable(typeof(StatusUpdateRequest))]
 [JsonSerializable(typeof(StaffCreateRequest))]
 [JsonSerializable(typeof(WebhookRequest))]
 [JsonSerializable(typeof(SignRequest))]
@@ -206,6 +235,7 @@ app.Run();
 internal partial class AppJsonContext : JsonSerializerContext { }
 
 public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
+public record StatusUpdateRequest(int Status);
 public record StaffCreateRequest(string Name, string Role);
 public record WebhookRequest(string JsonContent, string OrderId);
 public record SignRequest(string Data);

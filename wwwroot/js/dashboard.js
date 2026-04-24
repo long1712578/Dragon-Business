@@ -4,10 +4,10 @@
 const API_BASE      = '/api';
 const SSO_BASE      = 'https://sso.longdev.store';
 const SSO_TOKEN     = `${SSO_BASE}/connect/token`;
-const CLIENT_ID     = 'dragon-business-dashboard';
-// Nếu SSO client được config là public client thì để rỗng,
-// nếu là confidential client thì điền secret vào đây (hoặc inject qua server-side proxy)
-const CLIENT_SECRET = '';
+// Dùng client 'WebApp' có sẵn trong SSO seed (đã bật Password Flow + RefreshToken)
+// Roles: 'admin' (full access) | 'employee' (view + create only)
+const CLIENT_ID     = 'WebApp';
+const CLIENT_SECRET = ''; // WebApp là Public client — không cần secret
 const TOKEN_KEY     = 'dragon_access_token';
 const USER_KEY      = 'dragon_username';
 
@@ -25,6 +25,36 @@ function saveSession(token, username) {
 function clearSession() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('dragon_refresh_token');
+}
+
+// ─────────────────────────────────────────────────────────────
+// RBAC — Decode JWT để lấy roles (ABP puts roles in 'role' claim)
+// Roles trong SSO seed: 'admin' | 'employee'
+// ─────────────────────────────────────────────────────────────
+function getRolesFromToken() {
+    const token = getToken();
+    if (!token) return [];
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const role = payload['role'] ?? payload['roles'] ?? payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] ?? [];
+        return Array.isArray(role) ? role : [role];
+    } catch { return []; }
+}
+
+function isAdmin() {
+    return getRolesFromToken().includes('admin');
+}
+
+// Show/hide các phần tử admin-only sau khi login
+function applyRoleUI() {
+    const admin = isAdmin();
+    document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = admin ? '' : 'none';
+    });
+    // Hiển thị role badge
+    const badge = document.getElementById('userRoleBadge');
+    if (badge) badge.textContent = admin ? 'Admin' : 'Employee';
 }
 
 // Authenticated fetch — auto logout on 401
@@ -89,13 +119,14 @@ async function doLogin() {
 
     try {
         // ABP Identity Server / OpenIddict — Resource Owner Password Flow
-        // Lưu ý: ABP yêu cầu client phải có AllowPasswordFlow = true trong OpenIddict
+        // Client 'WebApp' đã được seed với GrantTypes: [password, refresh_token]
+        // Scope 'IdentityService' đã được seed trong SSO → claim 'role' sẽ có trong JWT
         const params = {
             grant_type: 'password',
             client_id:  CLIENT_ID,
             username,
             password,
-            scope: 'openid profile',
+            scope: 'openid profile IdentityService',
         };
         // Chỉ đính kèm client_secret nếu client là confidential
         if (CLIENT_SECRET) params.client_secret = CLIENT_SECRET;
@@ -123,10 +154,10 @@ async function doLogin() {
 
         const data = await res.json();
         saveSession(data.access_token, username);
-        // Lưu refresh_token nếu có (offline_access scope)
         if (data.refresh_token) localStorage.setItem('dragon_refresh_token', data.refresh_token);
         hideLoginScreen();
         setUserAvatar(username);
+        applyRoleUI(); // ← áp dụng RBAC ngay sau login
         init();
     } catch (e) {
         // Phân biệt lỗi mạng vs CORS
@@ -220,9 +251,15 @@ function renderStaff(data) {
                         <p class="text-xs text-gray-400">${s.role}</p>
                     </div>
                 </div>
-                <div class="text-right">
-                    <p class="font-bold text-cyan-400">₫${(s.totalTips || 0).toLocaleString()}</p>
-                    <p class="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Total Sales</p>
+                <div class="flex items-center gap-3">
+                    <div class="text-right">
+                        <p class="font-bold text-cyan-400">₫${(s.totalTips || 0).toLocaleString()}</p>
+                        <p class="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Total Sales</p>
+                    </div>
+                    <button class="admin-only px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs font-bold transition-all"
+                            onclick="deleteStaff(${s.id})" title="Xóa nhân viên">
+                        🗑
+                    </button>
                 </div>
             </div>`).join('');
 }
@@ -234,7 +271,7 @@ function renderStaffSelect(data) {
 
 function renderPayments(data) {
     paymentTableBody.innerHTML = data.length === 0
-        ? '<tr><td colspan="5" class="py-8 text-center text-gray-500">No transactions yet.</td></tr>'
+        ? '<tr><td colspan="6" class="py-8 text-center text-gray-500">No transactions yet.</td></tr>'
         : data.map(p => `
             <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
                 <td class="py-4 font-mono text-xs text-cyan-400">#${p.orderId}</td>
@@ -242,6 +279,12 @@ function renderPayments(data) {
                 <td class="py-4 text-gray-300 text-sm">${getStaffName(p.staffId)}</td>
                 <td class="py-4"><span class="badge ${getStatusClass(p.status)}">${getStatusText(p.status)}</span></td>
                 <td class="py-4 text-gray-500 text-xs">${new Date(p.createdAt).toLocaleTimeString()}</td>
+                <td class="py-4">
+                    <button class="admin-only px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/40 text-red-400 text-xs font-bold transition-all"
+                            onclick="deletePayment('${p.orderId}')" title="Xóa payment">
+                        🗑
+                    </button>
+                </td>
             </tr>`).join('');
 }
 
@@ -318,9 +361,33 @@ if (existingToken) {
     hideLoginScreen();
     const u = getUser();
     if (u) setUserAvatar(u);
+    applyRoleUI(); // ← restore RBAC từ token cũ
     init();
 } else {
     showLoginScreen();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin actions — xóa staff / payment
+// ─────────────────────────────────────────────────────────────
+async function deleteStaff(id) {
+    if (!confirm(`Xóa nhân viên #${id}? Không thể hoàn tác!`)) return;
+    const res = await apiFetch(`${API_BASE}/staff/${id}`, { method: 'DELETE' });
+    if (res && res.ok) {
+        fetchStaff();
+    } else {
+        alert('Xóa thất bại. Kiểm tra quyền admin.');
+    }
+}
+
+async function deletePayment(orderId) {
+    if (!confirm(`Xóa payment #${orderId}? Không thể hoàn tác!`)) return;
+    const res = await apiFetch(`${API_BASE}/payments/${orderId}`, { method: 'DELETE' });
+    if (res && res.ok) {
+        fetchPayments();
+    } else {
+        alert('Xóa thất bại. Kiểm tra quyền admin.');
+    }
 }
 
 
