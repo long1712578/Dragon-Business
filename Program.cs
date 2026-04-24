@@ -59,16 +59,19 @@ builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
 
-// 8. RedisFlow Event Streaming Configuration
+// 8. RedisFlow Event Streaming Configuration (Native AOT Compatible)
 builder.Services.AddRedisFlow(flow =>
 {
     flow.WithRedis(builder.Configuration["Redis"] ?? "localhost:6379")
-        .AddProducer("payments")
-        .UseJsonSerialization();
+        .AddProducer("payments");
+    
+    // Ép RedisFlow dùng AppJsonContext để không bị crash AOT
+    flow.UseSerializer<AotRedisSerializer>();
 });
 
 builder.Services.AddSignalR().AddJsonProtocol(options => {
     options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, Dragon.Business.Hubs.HubJsonContext.Default);
+    options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(1, Dragon.Business.AppJsonContext.Default);
 });
 
 var app = builder.Build();
@@ -234,7 +237,7 @@ using (var scope = app.Services.CreateScope())
         CREATE TABLE IF NOT EXISTS "Payments" (
             "OrderId"     TEXT    NOT NULL PRIMARY KEY,
             "TransId"     TEXT    NULL,
-            "Amount"      TEXT    NOT NULL DEFAULT '0',
+            "Amount"      DECIMAL NOT NULL DEFAULT 0,
             "Description" TEXT    NOT NULL DEFAULT '',
             "Status"      INTEGER NOT NULL DEFAULT 0,
             "Provider"    TEXT    NOT NULL DEFAULT 'ZaloPay',
@@ -242,6 +245,8 @@ using (var scope = app.Services.CreateScope())
             "CreatedAt"   TEXT    NOT NULL DEFAULT (datetime('now')),
             "PaidAt"      TEXT    NULL
         );
+        CREATE INDEX IF NOT EXISTS "idx_payments_staff" ON "Payments" ("StaffId");
+        CREATE INDEX IF NOT EXISTS "idx_payments_status" ON "Payments" ("Status");
         CREATE TABLE IF NOT EXISTS "Transactions" (
             "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "OrderId"   TEXT    NOT NULL DEFAULT '',
@@ -270,6 +275,7 @@ using (var scope = app.Services.CreateScope())
 app.Run();
 
 // AOT-Friendly JSON Source Generation
+[JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
 [JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(Payment))]
 [JsonSerializable(typeof(List<Payment>))]
@@ -278,6 +284,7 @@ app.Run();
 [JsonSerializable(typeof(StaffMemberWithStats))]
 [JsonSerializable(typeof(List<StaffMemberWithStats>))]
 [JsonSerializable(typeof(PaymentCreateRequest))]
+[JsonSerializable(typeof(PaymentRequestResponse))]
 [JsonSerializable(typeof(StatusUpdateRequest))]
 [JsonSerializable(typeof(StaffCreateRequest))]
 [JsonSerializable(typeof(WebhookRequest))]
@@ -287,6 +294,21 @@ app.Run();
 [JsonSerializable(typeof(PaymentStatus))]
 [JsonSerializable(typeof(object))]
 internal partial class AppJsonContext : JsonSerializerContext { }
+
+// Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT
+public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
+{
+    private readonly System.Text.Json.JsonSerializerOptions _options;
+    public AotRedisSerializer() {
+        _options = new System.Text.Json.JsonSerializerOptions {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+        };
+        _options.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
+    }
+    public byte[] Serialize<T>(T obj) => System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, _options);
+    public T Deserialize<T>(byte[] data) => System.Text.Json.JsonSerializer.Deserialize<T>(data, _options)!;
+    public object Deserialize(byte[] data, Type type) => System.Text.Json.JsonSerializer.Deserialize(data, type, _options)!;
+}
 
 public record ErrorResponse(string Message, string Error);
 public record DeleteResponse(string Message, string Id);
