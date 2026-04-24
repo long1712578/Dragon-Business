@@ -55,11 +55,27 @@ public class StaffService
 
     public async Task<StaffMember> CreateStaffAsync(string name, string role)
     {
-        var staff = new StaffMember { Name = name, Role = role };
-        _db.StaffMembers.Add(staff);
-        await _db.SaveChangesAsync();
+        // Native AOT: Bỏ qua EF Add() vì nó kích hoạt Model Building (gây crash)
+        // Dùng SQL INSERT thô là cách an toàn nhất
+        var conn = _db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "INSERT INTO StaffMembers (Name, Role, CreatedAt) VALUES (@name, @role, @now); SELECT last_insert_rowid();";
         
-        _logger.LogInformation("Created new staff member: {Name}", name);
-        return staff;
+        var pName = cmd.CreateParameter(); pName.ParameterName = "@name"; pName.Value = name; cmd.Parameters.Add(pName);
+        var pRole = cmd.CreateParameter(); pRole.ParameterName = "@role"; pRole.Value = role; cmd.Parameters.Add(pRole);
+        var pNow = cmd.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmd.Parameters.Add(pNow);
+
+        var id = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        
+        _logger.LogInformation("Created new staff member: {Name} with ID {Id}", name, id);
+        
+        return new StaffMember { 
+            Id = id, 
+            Name = name, 
+            Role = role, 
+            CreatedAt = DateTime.UtcNow 
+        };
     }
 }

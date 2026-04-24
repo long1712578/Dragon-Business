@@ -57,6 +57,9 @@ builder.Services.AddHealthChecks()
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
+builder.Services.AddSignalR().AddJsonProtocol(options => {
+    options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, Dragon.Business.Hubs.HubJsonContext.Default);
+});
 
 var app = builder.Build();
 
@@ -96,6 +99,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 // Mapping Health Checks
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHub<Dragon.Business.Hubs.NotificationHub>("/hub/notifications");
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = r => r.Tags.Contains("ready") });
 
 if (app.Environment.IsDevelopment())

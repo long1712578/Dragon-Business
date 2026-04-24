@@ -48,6 +48,22 @@ const Store = {
 // ═══════════════════════════════════════════════════════════════
 const AuthService = {
     getToken: () => localStorage.getItem(CONFIG.STORAGE_KEYS.TOKEN),
+    async login(username, password) {
+        const res = await fetch(CONFIG.SSO_TOKEN, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'password',
+                client_id:  CONFIG.CLIENT_ID,
+                username:   username,
+                password:   password,
+                scope:      'openid profile roles IdentityService'
+            })
+        });
+        if (!res.ok) throw new Error('Invalid credentials');
+        const data = await res.json();
+        this.saveSession(data, username);
+    },
     saveSession(data, username) {
         localStorage.setItem(CONFIG.STORAGE_KEYS.TOKEN,   data.access_token);
         localStorage.setItem(CONFIG.STORAGE_KEYS.USER,    username);
@@ -192,6 +208,23 @@ const UI = {
         }
     },
 
+    connectRealtime() {
+        if (!window.signalR) return;
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/hub/notifications")
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on("PaymentReceived", (msg) => {
+            console.log("Realtime notification:", msg);
+            Actions.refreshData();
+            // Show a small toast or notification if possible
+            alert(`${msg.title}\n${msg.message}`);
+        });
+
+        connection.start().catch(err => console.error("SignalR Error:", err));
+    },
+
     esc: (str) => String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),
 };
 
@@ -289,6 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (token) {
         Store.setState({ isLoggedIn: true, user: { name: localStorage.getItem(CONFIG.STORAGE_KEYS.USER), role: AuthService.getRoles()[0] } });
         Actions.refreshData();
+        UI.connectRealtime();
         setInterval(() => Actions.refreshData(), CONFIG.REFRESH_INTERVAL);
     }
 });
