@@ -262,65 +262,60 @@ app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var conn = db.Database.GetDbConnection();
-    conn.Open();
-
-    using var cmd = conn.CreateCommand();
-
-    // 1. Tạo bảng (idempotent)
-    cmd.CommandText = """
-        CREATE TABLE IF NOT EXISTS "StaffMembers" (
-            "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            "Name"      TEXT    NOT NULL DEFAULT '',
-            "Role"      TEXT    NOT NULL DEFAULT '',
-            "CreatedAt" TEXT    NOT NULL DEFAULT (datetime('now'))
+    
+    // 1. Tạo bảng và Migration (idempotent)
+    var seedSql = @"
+        CREATE TABLE IF NOT EXISTS ""StaffMembers"" (
+            ""Id""        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            ""Name""      TEXT    NOT NULL,
+            ""Role""      TEXT    NOT NULL,
+            ""CreatedAt"" TEXT    NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE IF NOT EXISTS "Payments" (
-            "OrderId"     TEXT    NOT NULL PRIMARY KEY,
-            "TransId"     TEXT    NULL,
-            "Amount"      DECIMAL NOT NULL DEFAULT 0,
-            "Description" TEXT    NOT NULL DEFAULT '',
-            "Status"      INTEGER NOT NULL DEFAULT 0,
-            "Provider"    TEXT    NOT NULL DEFAULT 'ZaloPay',
-            "StaffId"     TEXT    NULL,
-            "CreatedAt"   TEXT    NOT NULL DEFAULT (datetime('now')),
-            "PaidAt"      TEXT    NULL,
-            "PaymentUrl"  TEXT    NULL
+        CREATE TABLE IF NOT EXISTS ""Payments"" (
+            ""OrderId""     TEXT    NOT NULL PRIMARY KEY,
+            ""TransId""     TEXT    NULL,
+            ""Amount""      DECIMAL NOT NULL DEFAULT 0,
+            ""Description"" TEXT    NULL,
+            ""Status""      INTEGER NOT NULL DEFAULT 0,
+            ""Provider""    TEXT    NOT NULL DEFAULT 'ZaloPay',
+            ""StaffId""     TEXT    NULL,
+            ""CreatedAt""   TEXT    NOT NULL DEFAULT (datetime('now')),
+            ""PaidAt""      TEXT    NULL,
+            ""PaymentUrl""  TEXT    NULL
         );
-        CREATE INDEX IF NOT EXISTS "idx_payments_staff" ON "Payments" ("StaffId");
-        CREATE INDEX IF NOT EXISTS "idx_payments_status" ON "Payments" ("Status");
+        CREATE INDEX IF NOT EXISTS ""idx_payments_staff"" ON ""Payments"" (""StaffId"");
+        CREATE INDEX IF NOT EXISTS ""idx_payments_status"" ON ""Payments"" (""Status"");
+
+        CREATE TABLE IF NOT EXISTS ""Transactions"" (
+            ""Id""        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+            ""OrderId""   TEXT    NOT NULL DEFAULT '',
+            ""Content""   TEXT    NOT NULL DEFAULT '',
+            ""CreatedAt"" TEXT    NOT NULL DEFAULT ''
+        );
     ";
     await db.Database.ExecuteSqlRawAsync(seedSql);
 
-    // HACK: Tự động thêm cột PaymentUrl nếu chưa có (Dành cho các DB cũ)
+    // HACK: Tự động thêm cột PaymentUrl nếu chưa có
     try {
         await db.Database.ExecuteSqlRawAsync("ALTER TABLE Payments ADD COLUMN PaymentUrl TEXT NULL;");
-    } catch { /* Bỏ qua nếu cột đã tồn tại */ }
-    
-    var seedTransactionsSql = @"
-        CREATE TABLE IF NOT EXISTS ""Transactions"" (
-            "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            "OrderId"   TEXT    NOT NULL DEFAULT '',
-            "Content"   TEXT    NOT NULL DEFAULT '',
-            "CreatedAt" TEXT    NOT NULL DEFAULT ''
-        );
-        """;
-    cmd.ExecuteNonQuery();
+    } catch { /* Đã tồn tại */ }
 
-    // 2. Seed staff nếu chưa có (raw SQL, không dùng LINQ)
+    // 2. Seed staff nếu chưa có
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+    using var cmd = conn.CreateCommand();
+    
     cmd.CommandText = "SELECT COUNT(*) FROM StaffMembers";
-    var count = (long)(cmd.ExecuteScalar() ?? 0L);
+    var count = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
     if (count == 0)
     {
-        cmd.CommandText = """
+        cmd.CommandText = @"
             INSERT INTO StaffMembers (Name, Role, CreatedAt) VALUES
                 ('Long Pham',        'TechLead', datetime('now')),
                 ('Dragon Employee',  'Barista',  datetime('now'));
-            """;
-        cmd.ExecuteNonQuery();
+        ";
+        await cmd.ExecuteNonQueryAsync();
     }
-
-    conn.Close();
 }
 
 app.Run();
