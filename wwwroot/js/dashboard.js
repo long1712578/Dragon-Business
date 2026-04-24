@@ -1,11 +1,15 @@
 // ─────────────────────────────────────────────────────────────
 // Config
 // ─────────────────────────────────────────────────────────────
-const API_BASE   = '/api';
-const SSO_TOKEN  = 'https://sso.longdev.store/connect/token';
-const CLIENT_ID  = 'dragon-business-dashboard';
-const TOKEN_KEY  = 'dragon_access_token';
-const USER_KEY   = 'dragon_username';
+const API_BASE      = '/api';
+const SSO_BASE      = 'https://sso.longdev.store';
+const SSO_TOKEN     = `${SSO_BASE}/connect/token`;
+const CLIENT_ID     = 'dragon-business-dashboard';
+// Nếu SSO client được config là public client thì để rỗng,
+// nếu là confidential client thì điền secret vào đây (hoặc inject qua server-side proxy)
+const CLIENT_SECRET = '';
+const TOKEN_KEY     = 'dragon_access_token';
+const USER_KEY      = 'dragon_username';
 
 // ─────────────────────────────────────────────────────────────
 // Auth helpers
@@ -84,33 +88,53 @@ async function doLogin() {
     loginError.classList.add('hidden');
 
     try {
-        const body = new URLSearchParams({
+        // ABP Identity Server / OpenIddict — Resource Owner Password Flow
+        // Lưu ý: ABP yêu cầu client phải có AllowPasswordFlow = true trong OpenIddict
+        const params = {
             grant_type: 'password',
             client_id:  CLIENT_ID,
             username,
             password,
-            scope: 'openid profile',
-        });
+            scope: 'openid profile offline_access DragonBusiness',
+        };
+        // Chỉ đính kèm client_secret nếu client là confidential
+        if (CLIENT_SECRET) params.client_secret = CLIENT_SECRET;
 
         const res = await fetch(SSO_TOKEN, {
             method:  'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body:    body.toString(),
+            body:    new URLSearchParams(params).toString(),
         });
 
         if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            showLoginError(err.error_description || 'Invalid username or password.');
+            let errMsg = 'Invalid username or password.';
+            try {
+                const err = await res.json();
+                if (err.error === 'invalid_client')
+                    errMsg = 'SSO client chưa được cấu hình đúng (client_id/secret). Kiểm tra lại OpenIddict.';
+                else if (err.error === 'unsupported_grant_type')
+                    errMsg = 'SSO chưa bật Password Flow. Bật AllowPasswordFlow trong ABP OpenIddict.';
+                else if (err.error_description)
+                    errMsg = err.error_description;
+            } catch (_) { /* ignore */ }
+            showLoginError(errMsg);
             return;
         }
 
         const data = await res.json();
         saveSession(data.access_token, username);
+        // Lưu refresh_token nếu có (offline_access scope)
+        if (data.refresh_token) localStorage.setItem('dragon_refresh_token', data.refresh_token);
         hideLoginScreen();
         setUserAvatar(username);
         init();
     } catch (e) {
-        showLoginError('Cannot connect to SSO. Please try again.');
+        // Phân biệt lỗi mạng vs CORS
+        if (e instanceof TypeError && e.message.includes('fetch'))
+            showLoginError('Không thể kết nối tới SSO (CORS hoặc mạng). Kiểm tra CORS policy tại sso.longdev.store.');
+        else
+            showLoginError('Lỗi không xác định. Vui lòng thử lại.');
+        console.error('[doLogin]', e);
     } finally {
         setLoginLoading(false);
     }
@@ -299,158 +323,4 @@ if (existingToken) {
     showLoginScreen();
 }
 
-const staffList = document.getElementById('staffList');
-const statRevenue = document.getElementById('statRevenue');
-const statSuccessCount = document.getElementById('statSuccessCount');
-const statStaffCount = document.getElementById('statStaffCount');
 
-const paymentModal = document.getElementById('paymentModal');
-const btnCreatePayment = document.getElementById('btnCreatePayment');
-const btnCloseModal = document.getElementById('btnCloseModal');
-const btnConfirmPayment = document.getElementById('btnConfirmPayment');
-const selectStaff = document.getElementById('selectStaff');
-
-// Global Data
-let allStaff = [];
-
-// Init
-async function init() {
-    await fetchStaff();
-    await fetchPayments();
-    
-    // Auto refresh every 10 seconds
-    setInterval(() => {
-        fetchPayments();
-        fetchStaff();
-    }, 10000);
-}
-
-// Fetch Staff
-async function fetchStaff() {
-    try {
-        const res = await fetch(`${API_BASE}/staff`);
-        const data = await res.json();
-        allStaff = data;
-        renderStaff(data);
-        renderStaffSelect(data);
-        statStaffCount.innerText = data.length;
-    } catch (err) {
-        console.error('Fetch staff error:', err);
-    }
-}
-
-// Fetch Payments
-async function fetchPayments() {
-    try {
-        const res = await fetch(`${API_BASE}/payments`);
-        const data = await res.json();
-        renderPayments(data);
-        updateStats(data);
-    } catch (err) {
-        console.error('Fetch payments error:', err);
-    }
-}
-
-// Render Staff
-function renderStaff(data) {
-    staffList.innerHTML = data.map(s => `
-        <div class="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-all">
-            <div class="flex items-center space-x-4">
-                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center text-lg font-bold">
-                    ${s.name.charAt(0)}
-                </div>
-                <div>
-                    <h5 class="font-semibold">${s.name}</h5>
-                    <p class="text-xs text-gray-400">${s.role}</p>
-                </div>
-            </div>
-            <div class="text-right">
-                <p class="font-bold text-cyan-400">₫${s.totalTips.toLocaleString()}</p>
-                <p class="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Total Sales</p>
-            </div>
-        </div>
-    `).join('');
-}
-
-function renderStaffSelect(data) {
-    selectStaff.innerHTML = data.map(s => `<option value="${s.id}">${s.name} (${s.role})</option>`).join('');
-}
-
-// Render Payments
-function renderPayments(data) {
-    paymentTableBody.innerHTML = data.map(p => `
-        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors group">
-            <td class="py-4 font-mono text-xs text-cyan-400">#${p.orderId}</td>
-            <td class="py-4 font-bold">₫${p.amount.toLocaleString()}</td>
-            <td class="py-4 text-gray-300 text-sm">${getStaffName(p.staffId)}</td>
-            <td class="py-4">
-                <span class="badge ${getStatusClass(p.status)}">${getStatusText(p.status)}</span>
-            </td>
-            <td class="py-4 text-gray-500 text-xs">${new Date(p.createdAt).toLocaleTimeString()}</td>
-        </tr>
-    `).join('');
-}
-
-function getStaffName(id) {
-    const s = allStaff.find(x => x.id.toString() === id);
-    return s ? s.name : 'Unknown';
-}
-
-function getStatusClass(status) {
-    switch (status) {
-        case 2: return 'badge-paid';
-        case 1: return 'badge-pending';
-        case 0: return 'badge-created';
-        default: return 'badge-failed';
-    }
-}
-
-function getStatusText(status) {
-    const names = ['Created', 'Pending', 'Paid', 'Failed', 'Expired'];
-    return names[status] || 'Unknown';
-}
-
-function updateStats(data) {
-    const paidOnly = data.filter(p => p.status === 2);
-    const total = paidOnly.reduce((sum, p) => sum + p.amount, 0);
-    statRevenue.innerText = `₫${total.toLocaleString()}`;
-    statSuccessCount.innerText = paidOnly.length;
-}
-
-// Modal Logic
-btnCreatePayment.onclick = () => paymentModal.classList.remove('hidden');
-btnCloseModal.onclick = () => {
-    paymentModal.classList.add('hidden');
-    document.getElementById('qrResult').classList.add('hidden');
-};
-
-btnConfirmPayment.onclick = async () => {
-    const amount = document.getElementById('inputAmount').value;
-    const desc = document.getElementById('inputDesc').value;
-    const staffId = document.getElementById('selectStaff').value;
-
-    if (!amount || !desc) return alert('Please fill in all fields');
-
-    try {
-        const res = await fetch(`${API_BASE}/payments/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ amount: parseFloat(amount), desc, staffId })
-        });
-        const data = await res.json();
-        
-        const qrResult = document.getElementById('qrResult');
-        const paymentLink = document.getElementById('paymentLink');
-        
-        qrResult.classList.remove('hidden');
-        paymentLink.href = data.paymentUrl;
-        paymentLink.innerText = data.paymentUrl;
-        
-        fetchPayments(); // Refresh list
-    } catch (err) {
-        alert('Failed to create payment');
-    }
-};
-
-// Start
-init();
