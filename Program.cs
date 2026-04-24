@@ -274,6 +274,8 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
+namespace Dragon.Business;
+
 // AOT-Friendly JSON Source Generation
 [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
 [JsonSerializable(typeof(ErrorResponse))]
