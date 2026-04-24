@@ -156,6 +156,7 @@
                                 <th class="pb-4">Staff</th>
                                 <th class="pb-4">Status</th>
                                 <th class="pb-4">Time</th>
+                                <th class="pb-4">Action</th>
                             </tr>
                         </thead>
                         <tbody id="paymentTableBody">
@@ -208,6 +209,10 @@
         </div>
     </div>
 
-    <script src="js/dashboard.js"></script>
+    <!-- type="module": script chạy trong module scope riêng biệt
+         → const/let không bao giờ leak ra window → FIX PERMANENT cho bug 'already declared'
+         → Defer tự động → DOM luôn sẵn sàng khi script chạy
+         → Browser chỉ execute script này đúng 1 lần duy nhất -->
+    <script type="module" src="js/dashboard.js"></script>
 </body>
 </html>
