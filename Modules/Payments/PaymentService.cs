@@ -44,13 +44,16 @@ public class PaymentService
             Status = PaymentStatus.Created
         };
 
+        var url = await provider.CreatePaymentUrlAsync(payment);
+        payment.PaymentUrl = url;
+
         // Native AOT: Tránh Model Building crash bằng cách dùng Raw SQL INSERT
         var conn = _db.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"INSERT INTO Payments (OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt) 
-                            VALUES (@id, @amt, @desc, @status, @prov, @staff, @now)";
+        cmd.CommandText = @"INSERT INTO Payments (OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt, PaymentUrl) 
+                            VALUES (@id, @amt, @desc, @status, @prov, @staff, @now, @url)";
         
         var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = payment.OrderId; cmd.Parameters.Add(pId);
         var pAmt = cmd.CreateParameter(); pAmt.ParameterName = "@amt"; pAmt.Value = payment.Amount; cmd.Parameters.Add(pAmt);
@@ -59,10 +62,9 @@ public class PaymentService
         var pProv = cmd.CreateParameter(); pProv.ParameterName = "@prov"; pProv.Value = payment.Provider; cmd.Parameters.Add(pProv);
         var pStaff = cmd.CreateParameter(); pStaff.ParameterName = "@staff"; pStaff.Value = (object?)payment.StaffId ?? DBNull.Value; cmd.Parameters.Add(pStaff);
         var pNow = cmd.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmd.Parameters.Add(pNow);
+        var pUrl = cmd.CreateParameter(); pUrl.ParameterName = "@url"; pUrl.Value = (object?)payment.PaymentUrl ?? DBNull.Value; cmd.Parameters.Add(pUrl);
 
         await cmd.ExecuteNonQueryAsync();
-
-        var url = await provider.CreatePaymentUrlAsync(payment);
         
         _logger.LogInformation("Created payment request {OrderId} via {Provider}", orderId, providerName);
 

@@ -135,7 +135,7 @@ payments.MapGet("/", async (AppDbContext db) => {
     var conn = db.Database.GetDbConnection();
     await conn.OpenAsync();
     using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt FROM Payments ORDER BY CreatedAt DESC LIMIT 50";
+    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt, PaymentUrl FROM Payments ORDER BY CreatedAt DESC LIMIT 50";
     using var reader = await cmd.ExecuteReaderAsync();
     while (await reader.ReadAsync())
     {
@@ -146,7 +146,8 @@ payments.MapGet("/", async (AppDbContext db) => {
             Status = (PaymentStatus)reader.GetInt32(3),
             Provider = reader.GetString(4),
             StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
-            CreatedAt = DateTime.Parse(reader.GetString(6))
+            CreatedAt = DateTime.Parse(reader.GetString(6)),
+            PaymentUrl = reader.IsDBNull(7) ? null : reader.GetString(7)
         });
     }
     return Results.Ok(result);
@@ -283,7 +284,8 @@ using (var scope = app.Services.CreateScope())
             "Provider"    TEXT    NOT NULL DEFAULT 'ZaloPay',
             "StaffId"     TEXT    NULL,
             "CreatedAt"   TEXT    NOT NULL DEFAULT (datetime('now')),
-            "PaidAt"      TEXT    NULL
+            "PaidAt"      TEXT    NULL,
+            "PaymentUrl"  TEXT    NULL
         );
         CREATE INDEX IF NOT EXISTS "idx_payments_staff" ON "Payments" ("StaffId");
         CREATE INDEX IF NOT EXISTS "idx_payments_status" ON "Payments" ("Status");
@@ -371,4 +373,3 @@ namespace Dragon.Business
     public record SignResponse(string Data, string Mac);
     public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
 }
-

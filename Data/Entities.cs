@@ -39,6 +39,8 @@ public class Payment
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
     public DateTime? PaidAt { get; set; }
+
+    public string? PaymentUrl { get; set; }
 }
 
 public enum PaymentStatus

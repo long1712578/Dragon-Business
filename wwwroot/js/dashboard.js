@@ -130,7 +130,10 @@ const UI = {
                 <td class="py-4 text-gray-400">${state.staff.find(s => s.id.toString() === p.staffId)?.name || 'N/A'}</td>
                 <td class="py-4"><span class="badge ${p.status === 2 ? 'badge-paid' : 'badge-pending'}">${p.status === 2 ? 'Paid' : 'Pending'}</span></td>
                 <td class="py-4 text-xs text-gray-500">${new Date(p.createdAt).toLocaleTimeString()}</td>
-                <td class="py-4"><button data-action="del-pay" data-id="${p.orderId}" class="text-red-500 opacity-0 group-hover:opacity-100 transition-all"><i class="fas fa-trash"></i></button></td>
+                <td class="py-4 text-right">
+                    ${p.status !== 2 ? `<button onclick="window.open('${p.paymentUrl || '#'}', '_blank')" class="px-2 py-1 bg-blue-600/20 text-blue-400 rounded hover:bg-blue-600/40 text-xs mr-2">View QR</button>` : ''}
+                    <button data-action="del-pay" data-id="${p.orderId}" class="text-red-500 hover:text-red-400 transition-all"><i class="fas fa-trash"></i></button>
+                </td>
             </tr>
         `).join('');
 
@@ -275,9 +278,13 @@ const Actions = {
         const staffId = UI.el('selectStaff').value;
         try {
             const res = await ApiService.request('/payments/create', { method: 'POST', body: JSON.stringify({ amount, desc, staffId }) });
-            UI.el('qrResult').classList.remove('hidden');
-            UI.el('paymentLink').href = res.paymentUrl;
-            UI.el('paymentLink').textContent = 'Open Payment Link';
+            if (res.paymentUrl) {
+                UI.el('qrResult').classList.remove('hidden');
+                UI.el('paymentLink').href = res.paymentUrl;
+                UI.el('paymentLink').textContent = 'Open Payment Link';
+            } else {
+                alert('ZaloPay Error: Chữ ký không hợp lệ hoặc sai cấu hình. Vui lòng kiểm tra Server Log.');
+            }
             this.refreshData();
         } catch (e) { alert(e.message); }
     }

@@ -21,21 +21,23 @@ public class ZaloPayAdapter : IPaymentProvider
         var endpoint = _config["ZaloPay:Endpoint"] ?? "https://sb-openapi.zalopay.vn/v2/create";
 
         var appTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var appTransId = $"{DateTime.Now:yyMMdd}_{payment.OrderId}";
-        
-        var embedData = """{"redirecturl":"https://payhub.longdev.store"}""";
+        var appTransId = $"{DateTime.UtcNow:yyMMdd}_{payment.OrderId}";
+        var appUser = "DragonPayUser";
+        var amount = ((long)payment.Amount).ToString();
+        var embedData = "{}";
         var items = "[]";
         
-        var data = $"{appId}|{appTransId}|DragonUser|{(long)payment.Amount}|{appTime}|{embedData}|{items}";
+        // CHUẨN MAC V2: app_id|app_trans_id|app_user|amount|app_time|embed_data|item
+        var data = $"{appId}|{appTransId}|{appUser}|{amount}|{appTime}|{embedData}|{items}";
         var mac = ComputeHmacSha256(data, key1);
 
         using var client = new HttpClient();
         var payload = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             { "app_id", appId },
-            { "app_user", "DragonUser" },
+            { "app_user", appUser },
             { "app_time", appTime },
-            { "amount", ((long)payment.Amount).ToString() },
+            { "amount", amount },
             { "app_trans_id", appTransId },
             { "embed_data", embedData },
             { "item", items },
@@ -46,28 +48,20 @@ public class ZaloPayAdapter : IPaymentProvider
         try {
             var response = await client.PostAsync(endpoint, payload);
             var content = await response.Content.ReadAsStringAsync();
-            
-            // Console log để debug trong pod K8s
-            Console.WriteLine($"[ZaloPay Response] {content}");
+            Console.WriteLine($"[ZaloPay API] Request Data: {data}");
+            Console.WriteLine($"[ZaloPay API] Response: {content}");
             
             if (content.Contains("\"order_url\":\"")) {
                 var start = content.IndexOf("\"order_url\":\"") + 13;
                 var end = content.IndexOf("\"", start);
-                var url = content.Substring(start, end - start);
-                return url.Replace("\\/", "/");
+                return content.Substring(start, end - start).Replace("\\/", "/");
             }
 
-            // Nếu không có order_url, có thể là lỗi từ ZaloPay (Sai AppId/Key)
-            if (content.Contains("\"return_message\":\"")) {
-                 var start = content.IndexOf("\"return_message\":\"") + 18;
-                 var end = content.IndexOf("\"", start);
-                 var msg = content.Substring(start, end - start);
-                 return $"https://longdev.store/error?msg={System.Net.WebUtility.UrlEncode(msg)}";
-            }
-            
-            return "https://longdev.store/error?msg=ZaloPayAPIError";
+            // Nếu lỗi, log lại và trả về chuỗi trống để Frontend biết mà xử lý
+            return string.Empty;
         } catch (Exception ex) {
-            return $"https://longdev.store/error?msg={System.Net.WebUtility.UrlEncode(ex.Message)}";
+            Console.WriteLine($"[ZaloPay API] Exception: {ex.Message}");
+            return string.Empty;
         }
     }
 
