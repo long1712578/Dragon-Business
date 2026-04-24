@@ -95,7 +95,7 @@ async function doLogin() {
             client_id:  CLIENT_ID,
             username,
             password,
-            scope: 'openid profile offline_access DragonBusiness',
+            scope: 'openid profile',
         };
         // Chỉ đính kèm client_secret nếu client là confidential
         if (CLIENT_SECRET) params.client_secret = CLIENT_SECRET;
