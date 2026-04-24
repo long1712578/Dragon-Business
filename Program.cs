@@ -178,7 +178,7 @@ using (var scope = app.Services.CreateScope())
             "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "Name"      TEXT    NOT NULL DEFAULT '',
             "Role"      TEXT    NOT NULL DEFAULT '',
-            "CreatedAt" TEXT    NOT NULL DEFAULT ''
+            "CreatedAt" TEXT    NOT NULL DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS "Payments" (
             "OrderId"     TEXT    NOT NULL PRIMARY KEY,
@@ -188,7 +188,7 @@ using (var scope = app.Services.CreateScope())
             "Status"      INTEGER NOT NULL DEFAULT 0,
             "Provider"    TEXT    NOT NULL DEFAULT 'ZaloPay',
             "StaffId"     TEXT    NULL,
-            "CreatedAt"   TEXT    NOT NULL DEFAULT '',
+            "CreatedAt"   TEXT    NOT NULL DEFAULT (datetime('now')),
             "PaidAt"      TEXT    NULL
         );
         CREATE TABLE IF NOT EXISTS "Transactions" (

@@ -6,9 +6,72 @@
     <title>Dragon PayHub | Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0b0f19;
+            --panel-bg: rgba(30, 41, 59, 0.4);
+            --accent-cyan: #22d3ee;
+            --accent-purple: #8b5cf6;
+            --accent-pink: #ec4899;
+        }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg-deep); }
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-panel:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+        }
+        .nav-link {
+            display: flex;
+            items-center: center;
+            padding: 1rem 1.5rem;
+            border-radius: 1rem;
+            color: #94a3b8;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+        }
+        .nav-link:hover, .nav-link.active {
+            background: linear-gradient(90deg, rgba(34, 211, 238, 0.1), transparent);
+            color: var(--accent-cyan);
+            border-left: 3px solid var(--accent-cyan);
+        }
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+            padding: 2rem;
+        }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+            opacity: 0.5;
+        }
+        .badge {
+            padding: 0.4rem 0.8rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .badge-paid { background: rgba(34, 197, 94, 0.1); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2); }
+        .badge-pending { background: rgba(234, 179, 8, 0.1); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.2); }
+        .badge-created { background: rgba(34, 211, 238, 0.1); color: #22d3ee; border: 1px solid rgba(34, 211, 238, 0.2); }
+    </style>
 </head>
-<body class="bg-[#0f172a] text-white min-h-screen overflow-x-hidden">
+<body class="text-slate-200 min-h-screen">
 
     <!-- ==================== LOGIN SCREEN ==================== -->
     <div id="loginScreen" class="fixed inset-0 bg-[#0f172a] z-[999] flex items-center justify-center p-4">
@@ -171,8 +234,12 @@
             </div>
 
             <!-- Staff Ranking -->
-            <div class="glass-panel p-6">
-                <h4 class="text-xl font-bold mb-6">Top Performers</h4>
+            <div class="glass-panel p-8 border border-white/5 relative overflow-hidden group">
+                <div class="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/10 blur-3xl rounded-full group-hover:bg-purple-500/20 transition-all duration-700"></div>
+                <div class="flex justify-between items-center mb-8">
+                    <h4 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Top Performers</h4>
+                    <i class="fas fa-trophy text-orange-400"></i>
+                </div>
                 <div class="space-y-6" id="staffList">
                     <!-- Data will be injected here -->
                 </div>
