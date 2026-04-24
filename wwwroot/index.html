@@ -81,13 +81,17 @@
                 <p class="text-gray-400 mt-1">Here's what's happening at your shop today.</p>
             </div>
             <div class="flex items-center space-x-4">
+                <div class="hidden md:flex flex-col items-end mr-2">
+                    <span class="text-xs text-gray-500 uppercase tracking-widest font-bold">Access Level</span>
+                    <span id="userRoleBadge" class="text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">...</span>
+                </div>
                 <button id="btnCreatePayment" class="bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-2 rounded-full font-semibold hover:shadow-lg hover:shadow-cyan-500/30 transition-all">
                     <i class="fas fa-plus mr-2"></i> Create QR
                 </button>
                 <button id="btnLogout" class="text-gray-400 hover:text-red-400 transition-colors px-3 py-2 rounded-lg hover:bg-white/5" title="Logout">
                     <i class="fas fa-sign-out-alt text-xl"></i>
                 </button>
-                <div class="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center border-2 border-white/20" title="" id="userAvatar">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center border-2 border-white/20 shadow-lg shadow-purple-500/20" title="" id="userAvatar">
                     <i class="fas fa-user"></i>
                 </div>
             </div>
@@ -213,6 +217,6 @@
          → const/let không bao giờ leak ra window → FIX PERMANENT cho bug 'already declared'
          → Defer tự động → DOM luôn sẵn sàng khi script chạy
          → Browser chỉ execute script này đúng 1 lần duy nhất -->
-    <script type="module" src="js/dashboard.js?v=1.0.1"></script>
+    <script type="module" src="js/dashboard.js?v=1.0.2"></script>
 </body>
 </html>
