@@ -21,7 +21,7 @@ public class ZaloPayAdapter : IPaymentProvider
         var endpoint = _config["ZaloPay:Endpoint"] ?? "https://sb-openapi.zalopay.vn/v2/create";
 
         var appTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-        var appTransId = $"{DateTime.UtcNow:yyMMdd}_{payment.OrderId}";
+        var appTransId = $"{DateTime.Now:yyMMdd}_{payment.OrderId}";
         var appUser = "DragonPayUser";
         var amount = ((long)payment.Amount).ToString();
         var embedData = "{}";

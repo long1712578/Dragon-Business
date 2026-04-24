@@ -254,7 +254,7 @@ app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
     var key2 = config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
     using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key2));
     var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(req.Data));
-    var mac = BitConverter.ToString(hash).Replace("-", "").ToLower();
+    var mac = Convert.ToHexString(hash).ToLower();
     return Results.Ok(new SignResponse(req.Data, mac));
 }).WithTags("Dev Helper");
 
@@ -289,7 +289,16 @@ using (var scope = app.Services.CreateScope())
         );
         CREATE INDEX IF NOT EXISTS "idx_payments_staff" ON "Payments" ("StaffId");
         CREATE INDEX IF NOT EXISTS "idx_payments_status" ON "Payments" ("Status");
-        CREATE TABLE IF NOT EXISTS "Transactions" (
+    ";
+    await db.Database.ExecuteSqlRawAsync(seedSql);
+
+    // HACK: Tự động thêm cột PaymentUrl nếu chưa có (Dành cho các DB cũ)
+    try {
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE Payments ADD COLUMN PaymentUrl TEXT NULL;");
+    } catch { /* Bỏ qua nếu cột đã tồn tại */ }
+    
+    var seedTransactionsSql = @"
+        CREATE TABLE IF NOT EXISTS ""Transactions"" (
             "Id"        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             "OrderId"   TEXT    NOT NULL DEFAULT '',
             "Content"   TEXT    NOT NULL DEFAULT '',
