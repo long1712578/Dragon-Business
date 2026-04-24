@@ -47,23 +47,33 @@ public class ZaloPayAdapter : IPaymentProvider
             var response = await client.PostAsync(endpoint, payload);
             var content = await response.Content.ReadAsStringAsync();
             
-            // Native AOT: Parse JSON thủ công hoặc dùng source generator
-            // Ở đây tôi dùng string manipulation đơn giản để lấy order_url cho nhanh và an toàn AOT
+            // Console log để debug trong pod K8s
+            Console.WriteLine($"[ZaloPay Response] {content}");
+            
             if (content.Contains("\"order_url\":\"")) {
                 var start = content.IndexOf("\"order_url\":\"") + 13;
                 var end = content.IndexOf("\"", start);
-                return content.Substring(start, end - start).Replace("\\/", "/");
+                var url = content.Substring(start, end - start);
+                return url.Replace("\\/", "/");
+            }
+
+            // Nếu không có order_url, có thể là lỗi từ ZaloPay (Sai AppId/Key)
+            if (content.Contains("\"return_message\":\"")) {
+                 var start = content.IndexOf("\"return_message\":\"") + 18;
+                 var end = content.IndexOf("\"", start);
+                 var msg = content.Substring(start, end - start);
+                 return $"https://longdev.store/error?msg={System.Net.WebUtility.UrlEncode(msg)}";
             }
             
-            return $"https://sb-openapi.zalopay.vn/pay?order={appTransId}&mac={mac}"; // Fallback
-        } catch {
-            return $"https://sb-openapi.zalopay.vn/pay?order={appTransId}&mac={mac}";
+            return "https://longdev.store/error?msg=ZaloPayAPIError";
+        } catch (Exception ex) {
+            return $"https://longdev.store/error?msg={System.Net.WebUtility.UrlEncode(ex.Message)}";
         }
     }
 
     public Task<bool> VerifyWebhookAsync(string jsonContent, string signature)
     {
-        var key2 = _config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
+        var key2 = _config["ZaloPay:Key2"] ?? "Iyz2unPNSW0S1ge9df9uPaLqy0S89S6O";
         var expectedMac = ComputeHmacSha256(jsonContent, key2);
         return Task.FromResult(expectedMac == signature);
     }
