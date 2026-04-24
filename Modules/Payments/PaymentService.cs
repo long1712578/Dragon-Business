@@ -1,5 +1,6 @@
 using Dragon.Business.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using RedisFlow.Abstractions;
 
 namespace Dragon.Business.Modules.Payments;
