@@ -16,19 +16,41 @@ public class StaffService
 
     public async Task<List<StaffMemberWithStats>> GetAllStaffWithStatsAsync()
     {
-        // Native AOT: Sử dụng SQL thô để tránh dynamic LINQ compilation
-        // Đồng thời tối ưu hiệu năng: Join và GroupBy ngay trong DB thay vì N+1 query
-        var sql = @"
-            SELECT 
-                s.Id, 
-                s.Name, 
-                s.Role, 
-                COALESCE(SUM(CAST(p.Amount AS DECIMAL)), 0) as TotalTips
-            FROM StaffMembers s
-            LEFT JOIN Payments p ON p.StaffId = CAST(s.Id AS TEXT) AND p.Status = 2
-            GROUP BY s.Id, s.Name, s.Role";
+        // Native AOT: Bỏ qua EF Core SqlQueryRaw vì nó dùng reflection để map (gây crash)
+        // Dùng DbDataReader là cách an toàn và hiệu năng cao nhất cho AOT
+        var result = new List<StaffMemberWithStats>();
+        var conn = _db.Database.GetDbConnection();
+        
+        try {
+            if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+            
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT 
+                    s.Id, 
+                    s.Name, 
+                    s.Role, 
+                    COALESCE(SUM(CAST(p.Amount AS DECIMAL)), 0) as TotalTips
+                FROM StaffMembers s
+                LEFT JOIN Payments p ON p.StaffId = CAST(s.Id AS TEXT) AND p.Status = 2
+                GROUP BY s.Id, s.Name, s.Role";
 
-        return await _db.Database.SqlQueryRaw<StaffMemberWithStats>(sql).ToListAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add(new StaffMemberWithStats(
+                    reader.GetInt32(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetDecimal(3)
+                ));
+            }
+        } finally {
+            // EF Core sẽ tự quản lý connection nếu ta không can thiệp sâu, 
+            // nhưng ở đây ta mở thì nên đóng nếu cần (hoặc để EF lo)
+        }
+
+        return result;
     }
 
     public async Task<StaffMember> CreateStaffAsync(string name, string role)

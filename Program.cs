@@ -95,10 +95,26 @@ if (app.Environment.IsDevelopment())
 var payments = app.MapGroup("/api/payments").WithTags("Payments");
 
 payments.MapGet("/", async (AppDbContext db) => {
-    // Native AOT: Sử dụng FromSqlRaw cho các query phức tạp để tránh dynamic compilation
-    return await db.Payments
-        .FromSqlRaw("SELECT * FROM Payments ORDER BY CreatedAt DESC LIMIT 50")
-        .ToListAsync();
+    // Native AOT: Bỏ qua hoàn toàn EF Query Compiler để tránh lỗi 'Query wasn't precompiled'
+    var result = new List<Payment>();
+    var conn = db.Database.GetDbConnection();
+    await conn.OpenAsync();
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt FROM Payments ORDER BY CreatedAt DESC LIMIT 50";
+    using var reader = await cmd.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        result.Add(new Payment {
+            OrderId = reader.GetString(0),
+            Amount = reader.GetDecimal(1),
+            Description = reader.GetString(2),
+            Status = (PaymentStatus)reader.GetInt32(3),
+            Provider = reader.GetString(4),
+            StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
+            CreatedAt = DateTime.Parse(reader.GetString(6))
+        });
+    }
+    return Results.Ok(result);
 }).RequireAuthorization("StaffOnly");
 
 payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paymentService) => {
@@ -152,10 +168,10 @@ staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => 
 // Admin: xóa staff
 staff.MapDelete("/{id:int}", async (int id, AppDbContext db) => {
     var member = await db.StaffMembers.FindAsync(id);
-    if (member == null) return Results.NotFound(new { Message = $"Staff {id} not found" });
+    if (member == null) return Results.NotFound(new ErrorResponse("Staff not found", $"ID {id}"));
     db.StaffMembers.Remove(member);
     await db.SaveChangesAsync();
-    return Results.Ok(new { Message = $"Staff {id} deleted" });
+    return Results.Ok(new DeleteResponse("Staff deleted", id.ToString()));
 }).RequireAuthorization("ManagerOnly");
 
 // Module: Dev Helper
@@ -164,7 +180,7 @@ app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
     using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key2));
     var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(req.Data));
     var mac = BitConverter.ToString(hash).Replace("-", "").ToLower();
-    return Results.Ok(new { data = req.Data, mac });
+    return Results.Ok(new SignResponse(req.Data, mac));
 }).WithTags("Dev Helper");
 
 // Seed Database — 100% raw SQL, không dùng LINQ (không tương thích Native AOT)
@@ -235,15 +251,19 @@ app.Run();
 [JsonSerializable(typeof(StaffCreateRequest))]
 [JsonSerializable(typeof(WebhookRequest))]
 [JsonSerializable(typeof(SignRequest))]
+[JsonSerializable(typeof(SignResponse))]
+[JsonSerializable(typeof(DeleteResponse))]
 [JsonSerializable(typeof(PaymentStatus))]
 [JsonSerializable(typeof(object))]
 internal partial class AppJsonContext : JsonSerializerContext { }
 
 public record ErrorResponse(string Message, string Error);
+public record DeleteResponse(string Message, string Id);
 public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
 public record StatusUpdateRequest(int Status);
 public record StaffCreateRequest(string Name, string Role);
 public record WebhookRequest(string JsonContent, string OrderId);
 public record SignRequest(string Data);
+public record SignResponse(string Data, string Mac);
 public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
 

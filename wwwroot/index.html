@@ -120,16 +120,16 @@
             </h1>
         </div>
         <nav class="mt-8 px-4">
-            <a href="#" class="nav-link active">
+            <a href="#" id="navDashboard" class="nav-link active">
                 <i class="fas fa-chart-line mr-3"></i> Dashboard
             </a>
-            <a href="#" class="nav-link">
+            <a href="#" id="navPayments" class="nav-link">
                 <i class="fas fa-wallet mr-3"></i> Payments
             </a>
-            <a href="#" class="nav-link">
+            <a href="#" id="navStaff" class="nav-link">
                 <i class="fas fa-users mr-3"></i> Staff
             </a>
-            <a href="#" class="nav-link">
+            <a href="#" id="navSettings" class="nav-link">
                 <i class="fas fa-cog mr-3"></i> Settings
             </a>
         </nav>
@@ -160,121 +160,223 @@
             </div>
         </header>
 
-        <!-- Stats Cards -->
-        <section class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div class="stat-card">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-400">Total Revenue</p>
-                        <h3 class="text-3xl font-bold mt-2" id="statRevenue">$0</h3>
-                    </div>
-                    <div class="p-3 bg-cyan-500/20 rounded-xl text-cyan-400">
-                        <i class="fas fa-dollar-sign text-xl"></i>
-                    </div>
-                </div>
-                <div class="mt-4 flex items-center text-sm text-green-400">
-                    <i class="fas fa-arrow-up mr-1"></i> 12% vs yesterday
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-400">Success Payments</p>
-                        <h3 class="text-3xl font-bold mt-2" id="statSuccessCount">0</h3>
-                    </div>
-                    <div class="p-3 bg-purple-500/20 rounded-xl text-purple-400">
-                        <i class="fas fa-check-circle text-xl"></i>
+        <!-- Views Container -->
+        <div id="viewDashboard" class="view-section">
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                <div class="glass-panel stat-card">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Total Revenue</p>
+                            <h3 class="text-4xl font-bold" id="statRevenue">đ0</h3>
+                            <p class="text-emerald-400 text-sm mt-4 flex items-center">
+                                <i class="fas fa-arrow-up mr-1 text-xs"></i> 12% vs yesterday
+                            </p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 text-xl shadow-inner">
+                            <i class="fas fa-dollar-sign"></i>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-4 flex items-center text-sm text-purple-400">
-                    <i class="fas fa-sync fa-spin mr-1"></i> Real-time tracking
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-400">Active Staff</p>
-                        <h3 class="text-3xl font-bold mt-2" id="statStaffCount">0</h3>
-                    </div>
-                    <div class="p-3 bg-orange-500/20 rounded-xl text-orange-400">
-                        <i class="fas fa-user-friends text-xl"></i>
-                    </div>
-                </div>
-                <div class="mt-4 flex items-center text-sm text-gray-400">
-                    Currently on duty
-                </div>
-            </div>
-        </section>
 
-        <!-- Charts & Lists -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Recent Payments -->
-            <div class="lg:col-span-2 glass-panel p-6">
-                <div class="flex justify-between items-center mb-6">
-                    <h4 class="text-xl font-bold">Recent Transactions</h4>
-                    <a href="#" class="text-cyan-400 text-sm hover:underline">View all</a>
+                <div class="glass-panel stat-card">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Success Payments</p>
+                            <h3 class="text-4xl font-bold" id="statSuccessCount">0</h3>
+                            <p class="text-purple-400 text-sm mt-4 flex items-center">
+                                <i class="fas fa-sync fa-spin mr-1 text-xs"></i> Real-time tracking
+                            </p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400 text-xl">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                    </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead>
-                            <tr class="text-gray-400 text-sm border-b border-white/5">
-                                <th class="pb-4">Order ID</th>
-                                <th class="pb-4">Amount</th>
-                                <th class="pb-4">Staff</th>
-                                <th class="pb-4">Status</th>
-                                <th class="pb-4">Time</th>
-                                <th class="pb-4">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="paymentTableBody">
-                            <!-- Data will be injected here -->
-                        </tbody>
-                    </table>
+
+                <div class="glass-panel stat-card">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-gray-400 text-sm font-medium mb-1">Active Staff</p>
+                            <h3 class="text-4xl font-bold" id="statStaffCount">0</h3>
+                            <p class="text-orange-400 text-sm mt-4">Currently on duty</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-400 text-xl">
+                            <i class="fas fa-users"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Staff Ranking -->
-            <div class="glass-panel p-8 border border-white/5 relative overflow-hidden group">
-                <div class="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/10 blur-3xl rounded-full group-hover:bg-purple-500/20 transition-all duration-700"></div>
-                <div class="flex justify-between items-center mb-8">
-                    <h4 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Top Performers</h4>
-                    <i class="fas fa-trophy text-orange-400"></i>
+            <!-- Dashboard Content Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                <!-- Recent Transactions -->
+                <div class="lg:col-span-2 glass-panel p-8 border border-white/5">
+                    <div class="flex justify-between items-center mb-8">
+                        <h4 class="text-xl font-bold">Recent Transactions</h4>
+                        <a href="#" class="text-cyan-400 text-sm hover:underline">View all</a>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
+                                    <th class="pb-4 font-semibold">Order ID</th>
+                                    <th class="pb-4 font-semibold">Amount</th>
+                                    <th class="pb-4 font-semibold">Staff</th>
+                                    <th class="pb-4 font-semibold">Status</th>
+                                    <th class="pb-4 font-semibold">Time</th>
+                                    <th class="pb-4 font-semibold">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentTableBody" class="text-sm divide-y divide-white/5">
+                                <!-- Data will be injected here -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="space-y-6" id="staffList">
-                    <!-- Data will be injected here -->
+
+                <!-- Staff Ranking -->
+                <div class="glass-panel p-8 border border-white/5 relative overflow-hidden group">
+                    <div class="absolute -top-12 -right-12 w-32 h-32 bg-purple-500/10 blur-3xl rounded-full group-hover:bg-purple-500/20 transition-all duration-700"></div>
+                    <div class="flex justify-between items-center mb-8">
+                        <h4 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Top Performers</h4>
+                        <i class="fas fa-trophy text-orange-400"></i>
+                    </div>
+                    <div class="space-y-6" id="staffList">
+                        <!-- Data will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payments View -->
+        <div id="viewPayments" class="view-section hidden">
+            <div class="glass-panel p-8">
+                <h3 class="text-2xl font-bold mb-6">Payment History</h3>
+                <div id="fullPaymentTable" class="overflow-x-auto">
+                    <!-- Similar table to dashboard but more rows -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Staff Management View -->
+        <div id="viewStaff" class="view-section hidden">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-2xl font-bold">Staff Management</h3>
+                <button id="btnOpenStaffModal" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-bold transition-colors">
+                    <i class="fas fa-user-plus mr-2"></i> Add Staff
+                </button>
+            </div>
+            <div class="glass-panel p-8 overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
+                            <th class="pb-4 font-semibold">ID</th>
+                            <th class="pb-4 font-semibold">Name</th>
+                            <th class="pb-4 font-semibold">Role</th>
+                            <th class="pb-4 font-semibold">Total Revenue</th>
+                            <th class="pb-4 font-semibold">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="staffManagementTable" class="text-sm divide-y divide-white/5">
+                        <!-- Data injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="viewSettings" class="view-section hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="glass-panel p-8">
+                    <h3 class="text-2xl font-bold mb-8">General Settings</h3>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Store Name</label>
+                            <input type="text" value="Dragon Cafe Central" class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Currency</label>
+                            <select class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 focus:outline-none">
+                                <option>VND (đ)</option>
+                                <option>USD ($)</option>
+                            </select>
+                        </div>
+                        <button class="bg-cyan-500/20 text-cyan-400 px-6 py-2 rounded-lg font-bold hover:bg-cyan-500 hover:text-white transition-all">Save Changes</button>
+                    </div>
+                </div>
+                <div class="glass-panel p-8">
+                    <h3 class="text-2xl font-bold mb-8">API & Webhooks</h3>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-white/5 rounded-xl border border-white/10">
+                            <p class="text-xs text-gray-500 uppercase font-bold mb-1">Webhook URL</p>
+                            <code class="text-cyan-400 text-xs">https://api.longdev.store/webhook/zalopay</code>
+                        </div>
+                        <div class="p-4 bg-white/5 rounded-xl border border-white/10">
+                            <p class="text-xs text-gray-500 uppercase font-bold mb-1">API Status</p>
+                            <p class="text-emerald-400 text-sm flex items-center"><i class="fas fa-check-circle mr-2"></i> Connected to Identity Service</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- Payment Modal (Hidden) -->
+    <!-- Create Staff Modal -->
+    <div id="staffModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-md p-8 border border-white/10 shadow-2xl">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-2xl font-bold">New Staff Member</h3>
+                <button id="btnCloseStaffModal" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Full Name</label>
+                    <input id="staffName" type="text" placeholder="e.g., John Doe"
+                        class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Role</label>
+                    <input id="staffRole" type="text" placeholder="e.g., Barista"
+                        class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-purple-500">
+                </div>
+                <button id="btnConfirmStaff"
+                    class="w-full bg-gradient-to-r from-purple-500 to-pink-600 py-4 rounded-xl font-bold shadow-lg shadow-purple-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                    Register Member
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
     <div id="paymentModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
-        <div class="bg-[#1e293b] w-full max-w-md rounded-2xl p-8 border border-white/10 shadow-2xl relative">
-            <button id="btnCloseModal" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+        <div class="glass-panel w-full max-w-md p-8 border border-white/10 shadow-2xl relative">
+            <button id="btnCloseModal" class="absolute top-6 right-6 text-gray-400 hover:text-white transition-colors">
                 <i class="fas fa-times text-xl"></i>
             </button>
-            <h3 class="text-2xl font-bold mb-6">Create QR Payment</h3>
-            <div class="space-y-4">
+            <h3 class="text-2xl font-bold mb-8 bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">Create QR Payment</h3>
+            <div class="space-y-6">
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Amount (VND)</label>
+                    <label class="block text-sm text-gray-400 mb-2">Amount (VND)</label>
                     <input type="number" id="inputAmount" placeholder="50000" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Description</label>
-                    <input type="text" id="inputDesc" placeholder="Cafe Latte..." class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
+                    <label class="block text-sm text-gray-400 mb-2">Description</label>
+                    <input type="text" id="inputDesc" placeholder="e.g. Order #123" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
                 </div>
                 <div>
-                    <label class="block text-sm text-gray-400 mb-1">Staff Member</label>
+                    <label class="block text-sm text-gray-400 mb-2">Assign to Staff Member</label>
                     <select id="selectStaff" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
                         <!-- Options will be injected here -->
                     </select>
                 </div>
-                <button id="btnConfirmPayment" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-3 rounded-lg font-bold mt-4 hover:shadow-lg hover:shadow-cyan-500/30 transition-all">
+                <button id="btnConfirmPayment" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-4 rounded-xl font-bold shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
                     Generate QR Link
                 </button>
-                <div id="qrResult" class="hidden mt-6 p-4 bg-white/5 rounded-lg border border-white/10 text-center">
-                    <p class="text-sm text-gray-400 mb-2">Scan or Open Link:</p>
-                    <a id="paymentLink" href="#" target="_blank" class="text-cyan-400 break-all hover:underline text-sm font-mono"></a>
+                <div id="qrResult" class="hidden mt-6 p-6 bg-cyan-500/5 rounded-2xl border border-cyan-500/10 text-center animate-pulse">
+                    <p class="text-xs text-gray-400 mb-3 uppercase tracking-widest font-bold">Payment Link Ready</p>
+                    <a id="paymentLink" href="#" target="_blank" class="text-cyan-400 break-all hover:underline text-sm font-mono block mb-2"></a>
+                    <p class="text-[10px] text-gray-500">Redirecting to ZaloPay Gateway...</p>
                 </div>
             </div>
         </div>
