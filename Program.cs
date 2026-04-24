@@ -66,7 +66,7 @@ app.Use(async (context, next) => {
     catch (Exception ex) {
         Log.Error(ex, "Unhandled exception occurred");
         context.Response.StatusCode = 500;
-        await context.Response.WriteAsJsonAsync(new { Message = "An internal server error occurred.", Error = ex.Message });
+        await context.Response.WriteAsJsonAsync(new ErrorResponse("An internal server error occurred.", ex.Message), AppJsonContext.Default.ErrorResponse);
     }
 });
 
@@ -95,7 +95,10 @@ if (app.Environment.IsDevelopment())
 var payments = app.MapGroup("/api/payments").WithTags("Payments");
 
 payments.MapGet("/", async (AppDbContext db) => {
-    return await db.Payments.OrderByDescending(p => p.CreatedAt).Take(50).ToListAsync();
+    // Native AOT: Sử dụng FromSqlRaw cho các query phức tạp để tránh dynamic compilation
+    return await db.Payments
+        .FromSqlRaw("SELECT * FROM Payments ORDER BY CreatedAt DESC LIMIT 50")
+        .ToListAsync();
 }).RequireAuthorization("StaffOnly");
 
 payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paymentService) => {
@@ -104,8 +107,9 @@ payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paym
 }).RequireAuthorization("StaffOnly");
 
 payments.MapGet("/{orderId}", async (string orderId, AppDbContext db) => {
-    var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-    return payment != null ? Results.Ok(payment) : Results.NotFound(new { Message = $"Payment {orderId} not found" });
+    // Native AOT: FindAsync dùng primary key mapping là an toàn nhất
+    var payment = await db.Payments.FindAsync(orderId);
+    return payment != null ? Results.Ok(payment) : Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
 }).RequireAuthorization("StaffOnly");
 
 payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
@@ -116,17 +120,17 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
 
 // Admin: xóa payment
 payments.MapDelete("/{orderId}", async (string orderId, AppDbContext db) => {
-    var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-    if (payment == null) return Results.NotFound(new { Message = $"Payment {orderId} not found" });
+    var payment = await db.Payments.FindAsync(orderId);
+    if (payment == null) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
     db.Payments.Remove(payment);
     await db.SaveChangesAsync();
-    return Results.Ok(new { Message = $"Payment {orderId} deleted" });
+    return Results.Ok(new ErrorResponse("Deleted", orderId));
 }).RequireAuthorization("ManagerOnly");
 
 // Admin: cập nhật trạng thái payment thủ công
 payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest req, AppDbContext db) => {
-    var payment = await db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
-    if (payment == null) return Results.NotFound(new { Message = $"Payment {orderId} not found" });
+    var payment = await db.Payments.FindAsync(orderId);
+    if (payment == null) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
     payment.Status = (PaymentStatus)req.Status;
     await db.SaveChangesAsync();
     return Results.Ok(payment);
@@ -219,6 +223,7 @@ using (var scope = app.Services.CreateScope())
 app.Run();
 
 // AOT-Friendly JSON Source Generation
+[JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(Payment))]
 [JsonSerializable(typeof(List<Payment>))]
 [JsonSerializable(typeof(StaffMember))]
@@ -234,6 +239,7 @@ app.Run();
 [JsonSerializable(typeof(object))]
 internal partial class AppJsonContext : JsonSerializerContext { }
 
+public record ErrorResponse(string Message, string Error);
 public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
 public record StatusUpdateRequest(int Status);
 public record StaffCreateRequest(string Name, string Role);

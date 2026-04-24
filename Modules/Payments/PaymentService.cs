@@ -59,7 +59,8 @@ public class PaymentService
             return false;
         }
 
-        var payment = await _db.Payments.FirstOrDefaultAsync(p => p.OrderId == orderId);
+        // Native AOT: FindAsync an toàn hơn dynamic LINQ
+        var payment = await _db.Payments.FindAsync(orderId);
         if (payment != null && payment.Status != PaymentStatus.Paid)
         {
             payment.Status = PaymentStatus.Paid;

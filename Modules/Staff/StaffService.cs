@@ -16,19 +16,19 @@ public class StaffService
 
     public async Task<List<StaffMemberWithStats>> GetAllStaffWithStatsAsync()
     {
-        var staff = await _db.StaffMembers.ToListAsync();
-        var result = new List<StaffMemberWithStats>();
+        // Native AOT: Sử dụng SQL thô để tránh dynamic LINQ compilation
+        // Đồng thời tối ưu hiệu năng: Join và GroupBy ngay trong DB thay vì N+1 query
+        var sql = @"
+            SELECT 
+                s.Id, 
+                s.Name, 
+                s.Role, 
+                COALESCE(SUM(CAST(p.Amount AS DECIMAL)), 0) as TotalTips
+            FROM StaffMembers s
+            LEFT JOIN Payments p ON p.StaffId = CAST(s.Id AS TEXT) AND p.Status = 2
+            GROUP BY s.Id, s.Name, s.Role";
 
-        foreach (var s in staff)
-        {
-            var totalTips = await _db.Payments
-                .Where(p => p.StaffId == s.Id.ToString() && p.Status == PaymentStatus.Paid)
-                .SumAsync(p => p.Amount);
-
-            result.Add(new StaffMemberWithStats(s.Id, s.Name, s.Role, totalTips));
-        }
-
-        return result;
+        return await _db.Database.SqlQueryRaw<StaffMemberWithStats>(sql).ToListAsync();
     }
 
     public async Task<StaffMember> CreateStaffAsync(string name, string role)
