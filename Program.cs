@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Dragon.Business;
 using Dragon.Business.Data;
 using Dragon.Business.Modules.Payments;
 using Dragon.Business.Modules.Staff;
@@ -274,58 +275,59 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-namespace Dragon.Business;
-
-// AOT-Friendly JSON Source Generation
-[JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
-[JsonSerializable(typeof(ErrorResponse))]
-[JsonSerializable(typeof(Payment))]
-[JsonSerializable(typeof(List<Payment>))]
-[JsonSerializable(typeof(StaffMember))]
-[JsonSerializable(typeof(List<StaffMember>))]
-[JsonSerializable(typeof(StaffMemberWithStats))]
-[JsonSerializable(typeof(List<StaffMemberWithStats>))]
-[JsonSerializable(typeof(PaymentCreateRequest))]
-[JsonSerializable(typeof(PaymentRequestResponse))]
-[JsonSerializable(typeof(StatusUpdateRequest))]
-[JsonSerializable(typeof(StaffCreateRequest))]
-[JsonSerializable(typeof(WebhookRequest))]
-[JsonSerializable(typeof(SignRequest))]
-[JsonSerializable(typeof(SignResponse))]
-[JsonSerializable(typeof(DeleteResponse))]
-[JsonSerializable(typeof(PaymentStatus))]
-[JsonSerializable(typeof(object))]
-internal partial class AppJsonContext : JsonSerializerContext { }
-
-// Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
-public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
+namespace Dragon.Business
 {
-    public byte[] Serialize<T>(T obj)
+    // AOT-Friendly JSON Source Generation
+    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
+    [JsonSerializable(typeof(ErrorResponse))]
+    [JsonSerializable(typeof(Payment))]
+    [JsonSerializable(typeof(List<Payment>))]
+    [JsonSerializable(typeof(StaffMember))]
+    [JsonSerializable(typeof(List<StaffMember>))]
+    [JsonSerializable(typeof(StaffMemberWithStats))]
+    [JsonSerializable(typeof(List<StaffMemberWithStats>))]
+    [JsonSerializable(typeof(PaymentCreateRequest))]
+    [JsonSerializable(typeof(PaymentRequestResponse))]
+    [JsonSerializable(typeof(StatusUpdateRequest))]
+    [JsonSerializable(typeof(StaffCreateRequest))]
+    [JsonSerializable(typeof(WebhookRequest))]
+    [JsonSerializable(typeof(SignRequest))]
+    [JsonSerializable(typeof(SignResponse))]
+    [JsonSerializable(typeof(DeleteResponse))]
+    [JsonSerializable(typeof(PaymentStatus))]
+    [JsonSerializable(typeof(object))]
+    internal partial class AppJsonContext : JsonSerializerContext { }
+
+    // Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
+    public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
     {
-        var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
-        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)typeInfo);
+        public byte[] Serialize<T>(T obj)
+        {
+            var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
+            return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)typeInfo);
+        }
+
+        public T Deserialize<T>(byte[] data)
+        {
+            var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
+            return (T)System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
+        }
+
+        public object Deserialize(byte[] data, Type type)
+        {
+            var typeInfo = AppJsonContext.Default.GetTypeInfo(type) ?? throw new NotSupportedException($"Type {type} not in AOT Context");
+            return System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
+        }
     }
 
-    public T Deserialize<T>(byte[] data)
-    {
-        var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
-        return (T)System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
-    }
-
-    public object Deserialize(byte[] data, Type type)
-    {
-        var typeInfo = AppJsonContext.Default.GetTypeInfo(type) ?? throw new NotSupportedException($"Type {type} not in AOT Context");
-        return System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
-    }
+    public record ErrorResponse(string Message, string Error);
+    public record DeleteResponse(string Message, string Id);
+    public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
+    public record StatusUpdateRequest(int Status);
+    public record StaffCreateRequest(string Name, string Role);
+    public record WebhookRequest(string JsonContent, string OrderId);
+    public record SignRequest(string Data);
+    public record SignResponse(string Data, string Mac);
+    public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
 }
-
-public record ErrorResponse(string Message, string Error);
-public record DeleteResponse(string Message, string Id);
-public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
-public record StatusUpdateRequest(int Status);
-public record StaffCreateRequest(string Name, string Role);
-public record WebhookRequest(string JsonContent, string OrderId);
-public record SignRequest(string Data);
-public record SignResponse(string Data, string Mac);
-public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
 
