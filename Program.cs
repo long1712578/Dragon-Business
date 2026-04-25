@@ -67,11 +67,17 @@ builder.Services.AddScoped<StaffService>();
 builder.Services.AddRedisFlow(flow =>
 {
     flow.WithRedis(builder.Configuration["Redis"] ?? "localhost:6379")
-        .AddProducer("payments");
+        .AddProducer("payments")
+        .AddConsumer("payments", "business-group", consumer => {
+            consumer.AddHandler<Dragon.Business.Modules.Notifications.PaymentNotificationHandler, Dragon.Business.Modules.Payments.PaymentSuccessEvent>();
+        });
     
     // Ép RedisFlow dùng AppJsonContext để không bị crash AOT
     flow.UseSerializer<AotRedisSerializer>();
 });
+
+// Đăng ký Handler vào DI (Cần thiết cho AOT)
+builder.Services.AddTransient<Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
 
 builder.Services.AddSignalR().AddJsonProtocol(options => {
     options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, Dragon.Business.Hubs.HubJsonContext.Default);
@@ -225,19 +231,28 @@ payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService
 payments.MapPost("/mock/{orderId}/simulate-paid", async (
     string orderId,
     AppDbContext db,
-    IHubContext<Dragon.Business.Hubs.NotificationHub> hub) =>
+    IStreamProducer producer) =>
 {
     var conn = db.Database.GetDbConnection();
     if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
 
-    // Kiểm tra đơn hàng tồn tại và đang Pending/Created
+    // Lấy thông tin đơn hàng
     using var cmdCheck = conn.CreateCommand();
-    cmdCheck.CommandText = "SELECT Status FROM Payments WHERE OrderId = @id";
+    cmdCheck.CommandText = "SELECT Status, Amount, StaffId, Provider FROM Payments WHERE OrderId = @id";
     var pCheck = cmdCheck.CreateParameter(); pCheck.ParameterName = "@id"; pCheck.Value = orderId; cmdCheck.Parameters.Add(pCheck);
-    var statusObj = await cmdCheck.ExecuteScalarAsync();
-    if (statusObj == null) return Results.NotFound(new ErrorResponse("Payment not found", orderId));
-    if (Convert.ToInt32(statusObj) == (int)PaymentStatus.Paid)
+    
+    using var reader = await cmdCheck.ExecuteReaderAsync();
+    if (!await reader.ReadAsync()) return Results.NotFound(new ErrorResponse("Payment not found", orderId));
+    
+    var currentStatus = reader.GetInt32(0);
+    var amount = reader.GetDecimal(1);
+    var staffId = reader.IsDBNull(2) ? null : reader.GetString(2);
+    var provider = reader.GetString(3);
+    
+    if (currentStatus == (int)PaymentStatus.Paid)
         return Results.BadRequest(new ErrorResponse("Already paid", orderId));
+
+    await reader.CloseAsync();
 
     // Cập nhật trạng thái → Paid
     using var cmdUpdate = conn.CreateCommand();
@@ -247,17 +262,16 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     var pId = cmdUpdate.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmdUpdate.Parameters.Add(pId);
     await cmdUpdate.ExecuteNonQueryAsync();
 
-    // SignalR → Dashboard cập nhật realtime
-    // Dùng record tường minh thay cho anonymous type để AOT không lỗi
-    await hub.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new PaymentStatusUpdateEvent(
+    // Bắn event vào RedisFlow → Consumer sẽ xử lý gửi SignalR Dashboard
+    await producer.ProduceAsync(new Dragon.Business.Modules.Payments.PaymentSuccessEvent(
         orderId,
-        (int)PaymentStatus.Paid,
-        "Paid",
-        "Mock",
-        DateTimeOffset.UtcNow
-    )]);
+        amount,
+        staffId,
+        DateTime.UtcNow,
+        provider
+    ));
 
-    Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid", orderId);
+    Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid and event produced", orderId);
     return Results.Ok(new MockSimulateResponse(true, orderId, "Paid"));
 }).AllowAnonymous(); // Phone không có token — AllowAnonymous là đúng
 
@@ -399,6 +413,7 @@ namespace Dragon.Business
     [JsonSerializable(typeof(MockPaymentResponse))]
     [JsonSerializable(typeof(MockSimulateResponse))]
     [JsonSerializable(typeof(PaymentStatusUpdateEvent))]
+    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
     [JsonSerializable(typeof(PaymentStatus))]
     [JsonSerializable(typeof(object))]
     internal partial class AppJsonContext : JsonSerializerContext { }

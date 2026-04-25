@@ -108,3 +108,56 @@ Bắn một tin nhắn Telegram cho Chủ quán: "Nhân viên An vừa nhận th
 Cập nhật vào bảng thống kê của An: Tổng tiền phục vụ trong ngày tăng thêm 50.000đ.
 💡 Lợi ích cho Shop/Cafe nhỏ:
 Chủ quán không cần phải có mặt ở quán 24/7. Chỉ cần ngồi ở nhà, mỗi khi nhân viên thanh toán xong, Telegram sẽ báo "Ting Ting" về điện thoại. Cuối tháng chỉ cần mở GET /api/staff là thấy ngay bảng lương/thưởng cho từng người.
+
+
+----------flow cũ
+sequenceDiagram
+    participant Z as ZaloPay / Mock
+    participant P as PaymentService
+    participant S as SignalR
+    participant D as Dashboard (Browser)
+
+    Z->>P: Webhook / Simulate
+    Note over P: Cập nhật Database
+    P->>S: Gửi trực tiếp thông báo
+    S-->>D: Hiển thị lên Dashboard
+    P->>Z: Trả về kết quả (OK)
+Vấn đề: Nếu SignalR gặp sự cố hoặc Dashboard quá tải, nó có thể làm chậm hoặc gây lỗi cho quá trình xử lý thanh toán.
+
+----------flow mới
+ssequenceDiagram
+    participant Z as ZaloPay / Mock
+    participant P as PaymentService
+    participant R as Redis Stream
+    participant C as Notification Consumer
+    participant S as SignalR
+    participant D as Dashboard (Browser)
+    Z->>P: Webhook / Simulate
+    Note over P: Cập nhật Database
+    P->>R: Bắn Event "PaymentSuccess"
+    P->>Z: Trả về kết quả ngay lập tức (Cực nhanh)
+    
+    Note over R: Event nằm an toàn trong Redis
+    
+    R->>C: Consumer nhặt tin nhắn
+    C->>S: Yêu cầu gửi thông báo
+    S-->>D: Hiển thị lên Dashboard
+
+Bạn hãy nói với Team 4 điểm "vàng" này để họ thấy độ "vịn" của kiến trúc mới:
+
+Độ tin cậy tuyệt đối (Reliability):
+
+Nếu Dashboard bị sập hoặc SignalR bị lỗi, đơn hàng của khách hàng vẫn được xử lý thành công.
+Tin nhắn được lưu an toàn trong Redis. Khi Dashboard hoặc Consumer online trở lại, nó sẽ tự động xử lý các tin nhắn còn tồn đọng. Không bao giờ mất thông báo!
+Tốc độ phản hồi cực nhanh (Performance):
+
+PaymentService không cần đợi SignalR gửi xong thông báo mới trả về kết quả cho ZaloPay. Nó chỉ cần "ném" tin nhắn vào Redis (mất < 1ms) rồi trả về luôn. Điều này giúp giảm thiểu rủi ro bị timeout Webhook.
+Dễ dàng mở rộng (Extensibility):
+
+Giả sử ngày mai Team muốn: "Khi thanh toán xong thì gửi Email cho sếp và in hóa đơn".
+Cũ: Phải vào sửa nát file PaymentService.cs.
+Mới: Chỉ cần tạo thêm 1 Consumer mới (vd: EmailConsumer) lắng nghe cùng stream Redis đó. Không cần động vào một dòng code nào của logic thanh toán cũ.
+Sẵn sàng cho Microservices (Scale):
+
+Sau này nếu hệ thống lớn lên, bạn có thể tách phần gửi Notification sang một Server riêng (Service riêng) để chạy. PaymentService chỉ việc bắn event, còn Service khác lo việc gửi. Hệ thống của bạn đã sẵn sàng cho việc mở rộng quy mô lớn (Scaling).
+Tóm lại: Chúng ta đang chuyển từ một hệ thống "mọi thứ dính chùm vào nhau" sang một hệ thống Event-Driven chuyên nghiệp, giúp ứng dụng của chúng ta chạy nhanh hơn, an toàn hơn và cực kỳ dễ bảo trì. 🐉🚀🔥

@@ -11,20 +11,17 @@ public class PaymentService
     private readonly IEnumerable<IPaymentProvider> _providers;
     private readonly ILogger<PaymentService> _logger;
     private readonly IStreamProducer _producer;
-    private readonly Microsoft.AspNetCore.SignalR.IHubContext<Hubs.NotificationHub> _hubContext;
 
     public PaymentService(
         AppDbContext db, 
         IEnumerable<IPaymentProvider> providers, 
         ILogger<PaymentService> logger,
-        IStreamProducer producer,
-        Microsoft.AspNetCore.SignalR.IHubContext<Hubs.NotificationHub> hubContext)
+        IStreamProducer producer)
     {
         _db = db;
         _providers = providers;
         _logger = logger;
         _producer = producer;
-        _hubContext = hubContext;
     }
 
     public async Task<PaymentRequestResponse> CreatePaymentRequestAsync(decimal amount, string description, string? staffId = null, string providerName = "ZaloPay")
@@ -117,15 +114,8 @@ public class PaymentService
                 payment.PaidAt.Value,
                 payment.Provider
             ));
-
-            // Thông báo SignalR cho Dashboard
-            await _hubContext.Clients.All.SendAsync("PaymentReceived", new Hubs.NotificationMessage(
-                "Payment Confirmed!",
-                $"Order #{orderId} has been paid successfully.",
-                orderId
-            ));
             
-            _logger.LogInformation("Payment {OrderId} marked as PAID and event produced", orderId);
+            _logger.LogInformation("Payment {OrderId} marked as PAID and event produced to Redis", orderId);
         }
 
         return true;
