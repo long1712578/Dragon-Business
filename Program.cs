@@ -216,12 +216,12 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
 // [1] Tạo QR code giả lập — trả về ảnh QR từ api.qrserver.com (miễn phí)
 payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService paymentService) => {
     var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId, "Mock");
-    return Results.Ok(new { 
-        orderId     = result.OrderId,
-        qrImageUrl  = result.PaymentUrl,   // URL ảnh QR để dùng trong <img src=...>
-        provider    = "Mock",
-        message     = "Scan QR bằng phone hoặc dùng API simulate-paid để giả lập"
-    });
+    return Results.Ok(new MockPaymentResponse(
+        result.OrderId, 
+        result.PaymentUrl ?? "", 
+        "Mock", 
+        "Scan QR bằng phone hoặc dùng API simulate-paid để giả lập"
+    ));
 }).RequireAuthorization("StaffOnly");
 
 // [2] Simulate-paid — phone tap vào sau khi scan QR, không cần token
@@ -251,17 +251,17 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     await cmdUpdate.ExecuteNonQueryAsync();
 
     // SignalR → Dashboard cập nhật realtime
-    // Dùng SendCoreAsync để tránh lỗi Extension Method (CS1061) trong môi trường AOT
-    await hub.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new {
+    // Dùng record tường minh thay cho anonymous type để AOT không lỗi
+    await hub.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new PaymentStatusUpdateEvent(
         orderId,
-        status      = (int)PaymentStatus.Paid,
-        statusText  = "Paid",
-        provider    = "Mock",
-        paidAt      = DateTimeOffset.UtcNow
-    }]);
+        (int)PaymentStatus.Paid,
+        "Paid",
+        "Mock",
+        DateTimeOffset.UtcNow
+    )]);
 
     Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid", orderId);
-    return Results.Ok(new { success = true, orderId, status = "Paid" });
+    return Results.Ok(new MockSimulateResponse(true, orderId, "Paid"));
 }).AllowAnonymous(); // Phone không có token — AllowAnonymous là đúng
 
 // Admin: cập nhật trạng thái payment thủ công
@@ -392,11 +392,16 @@ namespace Dragon.Business
     [JsonSerializable(typeof(PaymentCreateRequest))]
     [JsonSerializable(typeof(PaymentRequestResponse))]
     [JsonSerializable(typeof(StatusUpdateRequest))]
+    [JsonSerializable(typeof(StatusUpdateResponse))]
     [JsonSerializable(typeof(StaffCreateRequest))]
     [JsonSerializable(typeof(WebhookRequest))]
+    [JsonSerializable(typeof(WebhookResponse))]
     [JsonSerializable(typeof(SignRequest))]
     [JsonSerializable(typeof(SignResponse))]
     [JsonSerializable(typeof(DeleteResponse))]
+    [JsonSerializable(typeof(MockPaymentResponse))]
+    [JsonSerializable(typeof(MockSimulateResponse))]
+    [JsonSerializable(typeof(PaymentStatusUpdateEvent))]
     [JsonSerializable(typeof(PaymentStatus))]
     [JsonSerializable(typeof(object))]
     internal partial class AppJsonContext : JsonSerializerContext { }
