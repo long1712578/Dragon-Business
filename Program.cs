@@ -434,9 +434,16 @@ namespace Dragon.Business
     public record DeleteResponse(string Message, string Id);
     public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
     public record StatusUpdateRequest(int Status);
+    public record StatusUpdateResponse(string OrderId, int Status);
     public record StaffCreateRequest(string Name, string Role);
     public record WebhookRequest(string JsonContent, string OrderId);
+    public record WebhookResponse(int return_code, string return_message);
     public record SignRequest(string Data);
     public record SignResponse(string Data, string Mac);
-    public record PaymentRequestResponse(string OrderId, string PaymentUrl, string Provider);
+    public record PaymentRequestResponse(string OrderId, string? PaymentUrl, string Provider);
+    
+    // Mock Payment Records
+    public record MockPaymentResponse(string OrderId, string QrImageUrl, string Provider, string Message);
+    public record MockSimulateResponse(bool Success, string OrderId, string Status);
+    public record PaymentStatusUpdateEvent(string OrderId, int Status, string StatusText, string Provider, DateTimeOffset PaidAt);
 }
