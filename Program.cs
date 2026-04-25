@@ -56,7 +56,9 @@ builder.Services.AddHealthChecks()
     .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
 
 // 7. Dependency Injection
+builder.Services.AddHttpContextAccessor(); // Cần cho MockPaymentProvider
 builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
+builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<StaffService>();
 
@@ -205,6 +207,60 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
     var success = await paymentService.ProcessWebhookAsync("ZaloPay", req.JsonContent, signature, req.OrderId);
     return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
 }).AllowAnonymous();
+
+// ═══════════════════════════════════════════════
+// MOCK PAYMENT SYSTEM — Dev/Staging only
+// ═══════════════════════════════════════════════
+
+// [1] Tạo QR code giả lập — trả về ảnh QR từ api.qrserver.com (miễn phí)
+payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService paymentService) => {
+    var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId, "Mock");
+    return Results.Ok(new { 
+        orderId     = result.OrderId,
+        qrImageUrl  = result.PaymentUrl,   // URL ảnh QR để dùng trong <img src=...>
+        provider    = "Mock",
+        message     = "Scan QR bằng phone hoặc dùng API simulate-paid để giả lập"
+    });
+}).RequireAuthorization("StaffOnly");
+
+// [2] Simulate-paid — phone tap vào sau khi scan QR, không cần token
+payments.MapPost("/mock/{orderId}/simulate-paid", async (
+    string orderId,
+    AppDbContext db,
+    Microsoft.AspNetCore.SignalR.IHubContext<Dragon.Business.Hubs.NotificationHub> hub) =>
+{
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+
+    // Kiểm tra đơn hàng tồn tại và đang Pending/Created
+    using var cmdCheck = conn.CreateCommand();
+    cmdCheck.CommandText = "SELECT Status FROM Payments WHERE OrderId = @id";
+    var pCheck = cmdCheck.CreateParameter(); pCheck.ParameterName = "@id"; pCheck.Value = orderId; cmdCheck.Parameters.Add(pCheck);
+    var statusObj = await cmdCheck.ExecuteScalarAsync();
+    if (statusObj == null) return Results.NotFound(new ErrorResponse("Payment not found", orderId));
+    if (Convert.ToInt32(statusObj) == (int)PaymentStatus.Paid)
+        return Results.BadRequest(new ErrorResponse("Already paid", orderId));
+
+    // Cập nhật trạng thái → Paid
+    using var cmdUpdate = conn.CreateCommand();
+    cmdUpdate.CommandText = "UPDATE Payments SET Status = @status, PaidAt = @paidAt WHERE OrderId = @id";
+    var pStat = cmdUpdate.CreateParameter(); pStat.ParameterName = "@status"; pStat.Value = (int)PaymentStatus.Paid; cmdUpdate.Parameters.Add(pStat);
+    var pPaid = cmdUpdate.CreateParameter(); pPaid.ParameterName = "@paidAt"; pPaid.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdUpdate.Parameters.Add(pPaid);
+    var pId = cmdUpdate.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmdUpdate.Parameters.Add(pId);
+    await cmdUpdate.ExecuteNonQueryAsync();
+
+    // SignalR → Dashboard cập nhật realtime
+    await hub.Clients.All.SendAsync("PaymentStatusUpdated", new {
+        orderId,
+        status      = (int)PaymentStatus.Paid,
+        statusText  = "Paid",
+        provider    = "Mock",
+        paidAt      = DateTime.UtcNow
+    });
+
+    Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid", orderId);
+    return Results.Ok(new { success = true, orderId, status = "Paid" });
+}).AllowAnonymous(); // Phone không có token — AllowAnonymous là đúng
 
 // Admin: cập nhật trạng thái payment thủ công
 payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest req, AppDbContext db) => {

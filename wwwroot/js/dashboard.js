@@ -276,19 +276,63 @@ const Actions = {
         const amount = parseFloat(UI.el('inputAmount').value);
         const desc = UI.el('inputDesc').value;
         const staffId = UI.el('selectStaff').value;
+        const provider = UI.el('selectProvider')?.value || 'zalopay';
+
+        if (provider === 'mock') {
+            return this.createMockPayment(amount, desc, staffId);
+        }
+
         try {
             const res = await ApiService.request('/payments/create', { method: 'POST', body: JSON.stringify({ amount, desc, staffId }) });
             if (res.paymentUrl) {
                 UI.el('qrResult').classList.remove('hidden');
                 UI.el('paymentLink').href = res.paymentUrl;
                 UI.el('paymentLink').textContent = 'Open Payment Link';
+                // Ẩn QR image nếu có
+                const qrImg = UI.el('qrImage');
+                if (qrImg) qrImg.style.display = 'none';
             } else {
-                alert('ZaloPay Error: Chữ ký không hợp lệ hoặc sai cấu hình. Vui lòng kiểm tra Server Log.');
+                alert('ZaloPay Error: Chữ ký không hợp lệ. Kiểm tra Server Log.');
             }
             this.refreshData();
         } catch (e) { alert(e.message); }
+    },
+
+    async createMockPayment(amount, desc, staffId) {
+        try {
+            const res = await ApiService.request('/payments/create-mock', { 
+                method: 'POST', 
+                body: JSON.stringify({ amount, desc, staffId }) 
+            });
+
+            UI.el('qrResult').classList.remove('hidden');
+            
+            // Hiển thị ảnh QR thực (từ api.qrserver.com)
+            let qrImg = UI.el('qrImage');
+            if (!qrImg) {
+                qrImg = document.createElement('img');
+                qrImg.id = 'qrImage';
+                qrImg.style.cssText = 'width:200px;height:200px;border-radius:12px;display:block;margin:12px auto;border:4px solid rgba(99,179,237,0.3)';
+                UI.el('qrResult').insertBefore(qrImg, UI.el('paymentLink'));
+            }
+            qrImg.src = res.qrImageUrl;
+            qrImg.style.display = 'block';
+            
+            // Link để mở trang mock-pay (dự phòng nếu không scan được)
+            UI.el('paymentLink').href = '#';
+            UI.el('paymentLink').textContent = `📱 Scan QR hoặc test: simulate-paid`;
+            UI.el('paymentLink').onclick = async (e) => {
+                e.preventDefault();
+                if (confirm(`Giả lập thanh toán thành công cho đơn hàng #${res.orderId}?`)) {
+                    await fetch(`/api/payments/mock/${res.orderId}/simulate-paid`, { method: 'POST' });
+                    UI.el('paymentModal').classList.add('hidden');
+                }
+            };
+
+            this.refreshData();
+        } catch (e) { alert(e.message); }
     }
-};
+}
 
 // ═══════════════════════════════════════════════════════════════
 // 5. BOOTSTRAP

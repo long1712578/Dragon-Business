@@ -376,13 +376,21 @@
                         <!-- Options will be injected here -->
                     </select>
                 </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Payment Provider</label>
+                    <select id="selectProvider" class="w-full bg-[#0f172a] border border-white/10 rounded-lg px-4 py-3 focus:outline-none focus:border-cyan-500 transition-colors">
+                        <option value="mock">🎭 Mock (Giả lập — Dev/Test)</option>
+                        <option value="zalopay">💳 ZaloPay Sandbox</option>
+                    </select>
+                </div>
                 <button id="btnConfirmPayment" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-4 rounded-xl font-bold shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all">
                     Generate QR Link
                 </button>
-                <div id="qrResult" class="hidden mt-6 p-6 bg-cyan-500/5 rounded-2xl border border-cyan-500/10 text-center animate-pulse">
+                <div id="qrResult" class="hidden mt-6 p-6 bg-cyan-500/5 rounded-2xl border border-cyan-500/10 text-center">
                     <p class="text-xs text-gray-400 mb-3 uppercase tracking-widest font-bold">Payment Link Ready</p>
+                    <!-- QR image sẽ được inject bởi JS khi dùng Mock -->
                     <a id="paymentLink" href="#" target="_blank" class="text-cyan-400 break-all hover:underline text-sm font-mono block mb-2"></a>
-                    <p class="text-[10px] text-gray-500">Redirecting to ZaloPay Gateway...</p>
+                    <p class="text-[10px] text-gray-500">Scan QR code hoặc nhấn link để thanh toán</p>
                 </div>
             </div>
         </div>

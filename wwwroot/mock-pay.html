@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Dragon PayHub — Xác nhận thanh toán</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0f1e;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .card {
+            background: linear-gradient(135deg, #1a1f35 0%, #0d1226 100%);
+            border: 1px solid rgba(99, 179, 237, 0.2);
+            border-radius: 24px;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,179,237,0.1);
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 28px;
+        }
+
+        .logo-icon {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+        }
+
+        .logo-text { font-size: 18px; font-weight: 700; }
+        .logo-sub { font-size: 11px; color: #64748b; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; }
+
+        .badge-mock {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(234, 179, 8, 0.15);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            color: #fbbf24;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-bottom: 24px;
+            letter-spacing: 0.5px;
+        }
+
+        .amount-section {
+            text-align: center;
+            margin-bottom: 28px;
+            padding: 20px;
+            background: rgba(59, 130, 246, 0.08);
+            border-radius: 16px;
+            border: 1px solid rgba(59, 130, 246, 0.15);
+        }
+
+        .amount-label { font-size: 12px; color: #64748b; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .amount-value { font-size: 36px; font-weight: 800; background: linear-gradient(135deg, #60a5fa, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            font-size: 14px;
+        }
+
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #64748b; font-weight: 500; }
+        .info-value { color: #e2e8f0; font-weight: 600; text-align: right; max-width: 55%; word-break: break-word; }
+
+        .order-id { font-family: monospace; font-size: 12px; background: rgba(99,179,237,0.1); padding: 2px 8px; border-radius: 6px; color: #60a5fa; }
+
+        .btn-pay {
+            display: block;
+            width: 100%;
+            padding: 18px;
+            margin-top: 28px;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            font-size: 17px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+            letter-spacing: 0.3px;
+        }
+
+        .btn-pay:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(59, 130, 246, 0.45); }
+        .btn-pay:active { transform: translateY(0); }
+        .btn-pay:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .status-box {
+            display: none;
+            text-align: center;
+            padding: 28px 20px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        .status-icon { font-size: 64px; margin-bottom: 16px; }
+        .status-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+        .status-sub { font-size: 14px; color: #64748b; }
+
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 11px;
+            color: #334155;
+            letter-spacing: 0.3px;
+        }
+
+        .loading { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div id="paymentView">
+        <div class="logo">
+            <div class="logo-icon">🐉</div>
+            <div>
+                <div class="logo-text">Dragon PayHub</div>
+                <div class="logo-sub">Secure Payment</div>
+            </div>
+        </div>
+
+        <div class="badge-mock">
+            <span>⚡</span> MOCK ENVIRONMENT
+        </div>
+
+        <div class="amount-section">
+            <div class="amount-label">Số tiền thanh toán</div>
+            <div class="amount-value" id="displayAmount">--</div>
+        </div>
+
+        <div class="info-row">
+            <span class="info-label">Mã đơn hàng</span>
+            <span class="info-value"><span class="order-id" id="displayOrderId">--</span></span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Nội dung</span>
+            <span class="info-value" id="displayDesc">--</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Phương thức</span>
+            <span class="info-value">🎭 Giả lập (Mock)</span>
+        </div>
+        <div class="info-row">
+            <span class="info-label">Thời gian</span>
+            <span class="info-value" id="displayTime">--</span>
+        </div>
+
+        <button class="btn-pay" id="btnPay" onclick="confirmPayment()">
+            ✅ Xác nhận thanh toán
+        </button>
+    </div>
+
+    <div id="successView" class="status-box">
+        <div class="status-icon">🎉</div>
+        <div class="status-title" style="color: #34d399;">Thanh toán thành công!</div>
+        <div class="status-sub" style="margin-top: 8px;">Dashboard đã được cập nhật realtime.</div>
+        <div class="status-sub" style="margin-top: 4px;">Bạn có thể đóng trang này.</div>
+    </div>
+
+    <div id="errorView" class="status-box">
+        <div class="status-icon">❌</div>
+        <div class="status-title" style="color: #f87171;">Có lỗi xảy ra</div>
+        <div class="status-sub" id="errorMsg"></div>
+    </div>
+
+    <div class="footer">Dragon Business · Mock Payment System · Dev Only</div>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('orderId') || 'N/A';
+    const amount  = parseFloat(params.get('amount') || '0');
+    const desc    = params.get('desc') || 'Thanh toán';
+
+    document.getElementById('displayOrderId').textContent = orderId;
+    document.getElementById('displayAmount').textContent = `đ${amount.toLocaleString('vi-VN')}`;
+    document.getElementById('displayDesc').textContent = desc;
+    document.getElementById('displayTime').textContent = new Date().toLocaleString('vi-VN');
+
+    async function confirmPayment() {
+        const btn = document.getElementById('btnPay');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span> Đang xử lý...';
+
+        try {
+            // Gọi API simulate-paid — cùng origin với app
+            const baseUrl = window.location.origin;
+            const res = await fetch(`${baseUrl}/api/payments/mock/${orderId}/simulate-paid`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (res.ok) {
+                document.getElementById('paymentView').style.display = 'none';
+                document.getElementById('successView').style.display = 'block';
+            } else {
+                const err = await res.json().catch(() => ({ message: 'Lỗi không xác định' }));
+                showError(err.message || 'Server trả về lỗi');
+            }
+        } catch (e) {
+            showError(`Không thể kết nối server: ${e.message}`);
+        }
+    }
+
+    function showError(msg) {
+        const btn = document.getElementById('btnPay');
+        btn.disabled = false;
+        btn.innerHTML = '✅ Xác nhận thanh toán';
+        document.getElementById('errorView').style.display = 'block';
+        document.getElementById('errorMsg').textContent = msg;
+    }
+</script>
+</body>
+</html>
