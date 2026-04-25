@@ -67,7 +67,7 @@ builder.Services.AddScoped<StaffService>();
 // 8. RedisFlow Event Streaming Configuration (Native AOT Compatible)
 builder.Services.AddRedisFlow(flow =>
 {
-    flow.WithRedis(builder.Configuration["Redis"] ?? "localhost:6379")
+    flow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379")
         .AddProducer("payments")
         .AddConsumer("payments", "business-group", consumer => {
             consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentSuccessEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
