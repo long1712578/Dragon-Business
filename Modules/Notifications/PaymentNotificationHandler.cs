@@ -2,13 +2,10 @@ using Dragon.Business.Hubs;
 using Dragon.Business.Modules.Payments;
 using Microsoft.AspNetCore.SignalR;
 using RedisFlow.Abstractions;
+using RedisFlow.Messages;
 
 namespace Dragon.Business.Modules.Notifications;
 
-/// <summary>
-/// Consumer xử lý thông báo thanh toán.
-/// Tách biệt hoàn toàn logic thông báo khỏi PaymentService (Event-Driven Architecture).
-/// </summary>
 public class PaymentNotificationHandler : IMessageHandler<PaymentSuccessEvent>
 {
     private readonly IHubContext<NotificationHub> _hubContext;
@@ -22,7 +19,7 @@ public class PaymentNotificationHandler : IMessageHandler<PaymentSuccessEvent>
 
     public async Task HandleAsync(PaymentSuccessEvent message, MessageContext context)
     {
-        _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán thành công: {OrderId} (MsgId: {MessageId})", message.OrderId, context.MessageId);
+        _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán thành công: {OrderId} (MsgId: {MessageId})", message.OrderId, context.Message.Id);
 
         // Gửi thông báo realtime tới Dashboard qua SignalR
         // Lưu ý: Dùng mảng [] cho tham số để chuẩn AOT
