@@ -9,6 +9,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using RedisFlow.Extensions;
+using RedisFlow.Abstractions;
 using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateSlimBuilder(args);
@@ -69,7 +70,7 @@ builder.Services.AddRedisFlow(flow =>
     flow.WithRedis(builder.Configuration["Redis"] ?? "localhost:6379")
         .AddProducer("payments")
         .AddConsumer("payments", "business-group", consumer => {
-            consumer.AddHandler<Dragon.Business.Modules.Notifications.PaymentNotificationHandler, Dragon.Business.Modules.Payments.PaymentSuccessEvent>();
+            consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentSuccessEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
         });
     
     // Ép RedisFlow dùng AppJsonContext để không bị crash AOT

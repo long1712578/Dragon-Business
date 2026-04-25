@@ -20,9 +20,9 @@ public class PaymentNotificationHandler : IMessageHandler<PaymentSuccessEvent>
         _logger = logger;
     }
 
-    public async Task HandleAsync(PaymentSuccessEvent message)
+    public async Task HandleAsync(PaymentSuccessEvent message, MessageContext context)
     {
-        _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán thành công: {OrderId}", message.OrderId);
+        _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán thành công: {OrderId} (MsgId: {MessageId})", message.OrderId, context.MessageId);
 
         // Gửi thông báo realtime tới Dashboard qua SignalR
         // Lưu ý: Dùng mảng [] cho tham số để chuẩn AOT
