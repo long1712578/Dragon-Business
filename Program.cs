@@ -9,6 +9,7 @@ using Scalar.AspNetCore;
 using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using RedisFlow.Extensions;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -227,7 +228,7 @@ payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService
 payments.MapPost("/mock/{orderId}/simulate-paid", async (
     string orderId,
     AppDbContext db,
-    Microsoft.AspNetCore.SignalR.IHubContext<Dragon.Business.Hubs.NotificationHub> hub) =>
+    IHubContext<Dragon.Business.Hubs.NotificationHub> hub) =>
 {
     var conn = db.Database.GetDbConnection();
     if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
@@ -250,13 +251,14 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     await cmdUpdate.ExecuteNonQueryAsync();
 
     // SignalR → Dashboard cập nhật realtime
-    await hub.Clients.All.SendAsync("PaymentStatusUpdated", new {
+    // Dùng SendCoreAsync để tránh lỗi Extension Method (CS1061) trong môi trường AOT
+    await hub.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new {
         orderId,
         status      = (int)PaymentStatus.Paid,
         statusText  = "Paid",
         provider    = "Mock",
-        paidAt      = DateTime.UtcNow
-    });
+        paidAt      = DateTimeOffset.UtcNow
+    }]);
 
     Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid", orderId);
     return Results.Ok(new { success = true, orderId, status = "Paid" });
