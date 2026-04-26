@@ -48,6 +48,14 @@ builder.Services.AddAuthentication("Bearer")
             options.MetadataAddress = metadataAddress;
             // Allow HTTP for internal cluster service-to-service communication
             options.RequireHttpsMetadata = metadataAddress.StartsWith("https://");
+            
+            // LỖI IDX10500: JWKS URI trong metadata vẫn trỏ ra public internet (https://sso.longdev.store/...)
+            // Do đó ta cần chặn request này và điều hướng nó về mạng nội bộ K8s.
+            if (Uri.TryCreate(options.Authority, UriKind.Absolute, out var publicUri) &&
+                Uri.TryCreate(metadataAddress, UriKind.Absolute, out var internalUri))
+            {
+                options.BackchannelHttpHandler = new InternalOidcRoutingHandler(publicUri.Host, internalUri.Host, internalUri.Port);
+            }
         }
 
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
@@ -451,8 +459,40 @@ namespace Dragon.Business
 
         public object Deserialize(byte[] data, Type type)
         {
-            var typeInfo = AppJsonContext.Default.GetTypeInfo(type) ?? throw new NotSupportedException($"Type {type} not in AOT Context");
+            var typeInfo = AppJsonContext.Default.GetTypeInfo(type) 
+                ?? throw new InvalidOperationException($"Type {type} not found in AppJsonContext");
             return System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
+        }
+    }
+
+    // Handler chặn các request gọi ra Authority (public internet) và bẻ lái vào mạng LAN
+    public class InternalOidcRoutingHandler : DelegatingHandler
+    {
+        private readonly string _publicHost;
+        private readonly string _internalHost;
+        private readonly int _internalPort;
+
+        public InternalOidcRoutingHandler(string publicHost, string internalHost, int internalPort)
+        {
+            _publicHost = publicHost;
+            _internalHost = internalHost;
+            _internalPort = internalPort;
+            InnerHandler = new SocketsHttpHandler();
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri?.Host == _publicHost)
+            {
+                var builder = new UriBuilder(request.RequestUri)
+                {
+                    Host = _internalHost,
+                    Port = _internalPort,
+                    Scheme = "http"
+                };
+                request.RequestUri = builder.Uri;
+            }
+            return base.SendAsync(request, cancellationToken);
         }
     }
 
