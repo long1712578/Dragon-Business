@@ -234,6 +234,36 @@ payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest 
     return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
 }).AllowAnonymous();
 
+payments.MapPost("/webhook/momo", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
+    // MoMo gửi signature qua header hoặc body, tuỳ setup. Ở đây làm mẫu:
+    var signature = context.Request.Headers["x-momo-signature"].ToString();
+    var success = await paymentService.ProcessWebhookAsync("MoMo", req.JsonContent, signature, req.OrderId);
+    return success ? Results.Ok(new { resultCode = 0, message = "success" }) : Results.BadRequest();
+}).AllowAnonymous();
+
+// Lấy danh sách logs (Transactions) của một Order
+payments.MapGet("/{orderId}/transactions", async (string orderId, AppDbContext db) => {
+    var conn = db.Database.GetDbConnection();
+    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+    
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "SELECT Id, Content, CreatedAt FROM Transactions WHERE OrderId = @id ORDER BY CreatedAt DESC";
+    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmd.Parameters.Add(pId);
+    
+    using var reader = await cmd.ExecuteReaderAsync();
+    var list = new List<TransactionResponse>();
+    while (await reader.ReadAsync())
+    {
+        list.Add(new TransactionResponse(
+            reader.GetInt32(0),
+            orderId,
+            reader.GetString(1),
+            reader.GetString(2)
+        ));
+    }
+    return Results.Ok(list);
+}).RequireAuthorization("StaffOnly");
+
 // ═══════════════════════════════════════════════
 // MOCK PAYMENT SYSTEM — Dev/Staging only
 // ═══════════════════════════════════════════════
@@ -283,6 +313,14 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     var pPaid = cmdUpdate.CreateParameter(); pPaid.ParameterName = "@paidAt"; pPaid.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdUpdate.Parameters.Add(pPaid);
     var pId = cmdUpdate.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmdUpdate.Parameters.Add(pId);
     await cmdUpdate.ExecuteNonQueryAsync();
+
+    // Lưu Transaction Audit Log cho Mockup
+    using var cmdLog = conn.CreateCommand();
+    cmdLog.CommandText = "INSERT INTO Transactions (OrderId, Content, CreatedAt) VALUES (@id, @content, @now)";
+    var pIdL = cmdLog.CreateParameter(); pIdL.ParameterName = "@id"; pIdL.Value = orderId; cmdLog.Parameters.Add(pIdL);
+    var pCnt = cmdLog.CreateParameter(); pCnt.ParameterName = "@content"; pCnt.Value = "{\"message\":\"Mock payment successful via simulate-paid API\"}"; cmdLog.Parameters.Add(pCnt);
+    var pNow = cmdLog.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdLog.Parameters.Add(pNow);
+    await cmdLog.ExecuteNonQueryAsync();
 
     // Bắn event vào RedisFlow → Consumer sẽ xử lý gửi SignalR Dashboard
     await producer.ProduceAsync(new Dragon.Business.Modules.Payments.PaymentSuccessEvent(
@@ -438,6 +476,7 @@ namespace Dragon.Business
     [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
     [JsonSerializable(typeof(PaymentStatus))]
     [JsonSerializable(typeof(object))]
+    [JsonSerializable(typeof(List<TransactionResponse>))]
     internal partial class AppJsonContext : JsonSerializerContext { }
 
     // Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
@@ -506,6 +545,7 @@ namespace Dragon.Business
     public record WebhookResponse(int return_code, string return_message);
     public record SignRequest(string Data);
     public record SignResponse(string Data, string Mac);
+    public record TransactionResponse(int Id, string OrderId, string Content, string CreatedAt);
     public record PaymentRequestResponse(string OrderId, string? PaymentUrl, string Provider);
     
     // Mock Payment Records

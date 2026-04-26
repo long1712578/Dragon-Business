@@ -7,7 +7,9 @@
 
 const CONFIG = Object.freeze({
     API_URL:      '/api',
-    SSO_TOKEN:    'https://sso.longdev.store/connect/token',
+    SSO_TOKEN:    window.location.hostname === 'localhost' 
+                    ? 'https://localhost:7001/connect/token' 
+                    : 'https://sso.longdev.store/connect/token',
     CLIENT_ID:    'dragon-payhub',
     CLIENT_SECRET: '', 
     STORAGE_KEYS: {
@@ -136,6 +138,30 @@ const UI = {
                 </td>
             </tr>
         `).join('');
+
+        // Full Payment History & Audit Logs
+        const fullPayTable = this.el('fullPaymentTable');
+        if (fullPayTable) {
+            fullPayTable.innerHTML = state.payments.map(p => `
+                <tr class="hover:bg-white/5 transition-colors group">
+                    <td class="py-4 font-mono text-cyan-400">#${p.orderId}</td>
+                    <td class="py-4 font-bold text-emerald-400">đ${p.amount.toLocaleString()}</td>
+                    <td class="py-4 text-gray-400">${state.staff.find(s => s.id.toString() === p.staffId)?.name || 'N/A'}</td>
+                    <td class="py-4"><span class="badge ${p.status === 2 ? 'badge-paid' : 'badge-pending'}">${p.status === 2 ? 'Paid' : 'Pending'}</span></td>
+                    <td class="py-4"><span class="bg-gray-800 text-xs px-2 py-1 rounded border border-gray-700">${this.esc(p.provider)}</span></td>
+                    <td class="py-4 text-xs text-gray-500">${new Date(p.createdAt).toLocaleString()}</td>
+                    <td class="py-4 text-xs text-gray-400">${p.paidAt ? new Date(p.paidAt).toLocaleString() : '-'}</td>
+                    <td class="py-4">
+                        <button data-action="view-logs" data-id="${p.orderId}" class="text-orange-400 hover:text-orange-300 transition-colors flex items-center gap-1 bg-orange-400/10 px-2 py-1 rounded text-xs">
+                            <i class="fas fa-file-code"></i> Logs
+                        </button>
+                    </td>
+                    <td class="py-4">
+                        <button data-action="del-pay" data-id="${p.orderId}" class="text-red-500 hover:text-red-400 transition-all"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        }
 
         // Staff Ranking (Dashboard)
         this.el('staffList').innerHTML = [...state.staff].sort((a,b) => b.totalTips - a.totalTips).slice(0, 5).map((s, idx) => `
@@ -331,6 +357,36 @@ const Actions = {
 
             this.refreshData();
         } catch (e) { alert(e.message); }
+    },
+
+    async viewTransactions(orderId) {
+        try {
+            const logs = await ApiService.request(`/payments/${orderId}/transactions`);
+            const modal = UI.el('transactionModal');
+            UI.el('transactionModalSubtitle').textContent = `Order: #${orderId}`;
+            
+            const list = UI.el('transactionList');
+            if (logs.length === 0) {
+                list.innerHTML = `<p class="text-gray-500 text-center py-4">No audit logs found for this order.</p>`;
+            } else {
+                list.innerHTML = logs.map(l => `
+                    <div class="bg-black/50 border border-white/5 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs text-gray-400 font-mono">Log ID: #${l.id}</span>
+                            <span class="text-xs text-cyan-400">${new Date(l.createdAt).toLocaleString()}</span>
+                        </div>
+                        <pre class="text-emerald-400 font-mono text-xs overflow-x-auto whitespace-pre-wrap">${UI.esc(l.content)}</pre>
+                    </div>
+                `).join('');
+            }
+
+            modal.classList.remove('hidden');
+            // Small delay for transition
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+            }, 10);
+        } catch (e) { alert('Could not load transactions: ' + e.message); }
     }
 }
 
@@ -365,7 +421,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const { action, id } = btn.dataset;
         if (action === 'del-staff') Actions.deleteStaff(id);
         if (action === 'del-pay')   ApiService.request(`/payments/${id}`, { method: 'DELETE' }).then(() => Actions.refreshData());
+        if (action === 'view-logs') Actions.viewTransactions(id);
     });
+
+    // Close Transaction Modal
+    UI.el('btnCloseTransactionModal').onclick = () => {
+        const modal = UI.el('transactionModal');
+        modal.classList.add('opacity-0');
+        modal.querySelector('div').classList.add('scale-95');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    };
 
     // Init
     UI.initMobileMenu();

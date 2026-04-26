@@ -60,9 +60,9 @@ public class Transaction
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
-public class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
+public class AppDbContext : DbContext
 {
-    public AppDbContext(Microsoft.EntityFrameworkCore.DbContextOptions<AppDbContext> options) : base(options) { }
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
