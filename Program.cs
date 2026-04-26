@@ -38,10 +38,22 @@ builder.Services.AddOpenApi();
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
+        // Public Authority for Issuer matching (iss claim in token)
         options.Authority = builder.Configuration["SSO:Authority"] ?? "https://sso.longdev.store";
+        
+        // Enterprise Pattern: Internal Backchannel for OIDC Metadata in K8s
+        var metadataAddress = builder.Configuration["SSO:MetadataAddress"];
+        if (!string.IsNullOrEmpty(metadataAddress))
+        {
+            options.MetadataAddress = metadataAddress;
+            // Allow HTTP for internal cluster service-to-service communication
+            options.RequireHttpsMetadata = metadataAddress.StartsWith("https://");
+        }
+
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
         {
-            ValidateAudience = false
+            ValidateAudience = false,
+            ValidIssuer = options.Authority // Ensure strict issuer matching even if metadata is internal
         };
     });
 
