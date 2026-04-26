@@ -53,7 +53,8 @@ builder.Services.AddAuthentication("Bearer")
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
         {
             ValidateAudience = false,
-            ValidIssuer = options.Authority // Ensure strict issuer matching even if metadata is internal
+            // Đảm bảo khớp issuer có hoặc không có dấu '/' ở cuối
+            ValidIssuers = new[] { options.Authority, options.Authority.TrimEnd('/') + "/" }
         };
     });
 
