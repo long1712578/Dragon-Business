@@ -7,3 +7,11 @@ public record PaymentSuccessEvent(
     DateTime PaidAt,
     string Provider
 );
+
+public record PaymentCreatedEvent(
+    string OrderId,
+    decimal Amount,
+    string? StaffId,
+    DateTime CreatedAt,
+    string Provider
+);

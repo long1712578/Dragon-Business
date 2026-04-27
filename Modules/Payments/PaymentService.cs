@@ -63,6 +63,15 @@ public class PaymentService
 
         await cmd.ExecuteNonQueryAsync();
         
+        // Bắn event khởi tạo vào RedisFlow
+        await _producer.ProduceAsync(new PaymentCreatedEvent(
+            payment.OrderId,
+            payment.Amount,
+            payment.StaffId,
+            DateTime.UtcNow,
+            payment.Provider
+        ));
+
         _logger.LogInformation("Created payment request {OrderId} via {Provider}", orderId, providerName);
 
         return new PaymentRequestResponse(orderId, url, providerName);

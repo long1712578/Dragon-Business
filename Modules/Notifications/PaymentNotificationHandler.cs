@@ -6,7 +6,9 @@ using RedisFlow.Messages;
 
 namespace Dragon.Business.Modules.Notifications;
 
-public class PaymentNotificationHandler : IMessageHandler<PaymentSuccessEvent>
+public class PaymentNotificationHandler : 
+    IMessageHandler<PaymentSuccessEvent>,
+    IMessageHandler<PaymentCreatedEvent>
 {
     private readonly IHubContext<NotificationHub> _hubContext;
     private readonly ILogger<PaymentNotificationHandler> _logger;
@@ -27,10 +29,25 @@ public class PaymentNotificationHandler : IMessageHandler<PaymentSuccessEvent>
             message.OrderId,
             2, // Paid
             "Paid",
-            "ZaloPay",
-            DateTimeOffset.UtcNow
+            message.Provider,
+            message.PaidAt
         )]);
         
         _logger.LogInformation("✅ [Consumer] Đã gửi thông báo realtime cho {OrderId}", message.OrderId);
+    }
+
+    public async Task HandleAsync(PaymentCreatedEvent message, MessageContext context)
+    {
+        _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán mới tạo: {OrderId} (MsgId: {MessageId})", message.OrderId, context.Message.Id);
+
+        await _hubContext.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new PaymentStatusUpdateEvent(
+            message.OrderId,
+            0, // Created/Pending
+            "Pending",
+            message.Provider,
+            message.CreatedAt
+        )]);
+        
+        _logger.LogInformation("✅ [Consumer] Đã gửi thông báo realtime Pending cho {OrderId}", message.OrderId);
     }
 }

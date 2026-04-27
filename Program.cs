@@ -92,6 +92,7 @@ builder.Services.AddRedisFlow(flow =>
         .AddProducer("payments")
         .AddConsumer("payments", "business-group", consumer => {
             consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentSuccessEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
+            consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentCreatedEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
         });
     
     // Ép RedisFlow dùng AppJsonContext để không bị crash AOT
@@ -283,8 +284,15 @@ payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService
 payments.MapPost("/mock/{orderId}/simulate-paid", async (
     string orderId,
     AppDbContext db,
-    IStreamProducer producer) =>
+    IStreamProducer producer,
+    IWebHostEnvironment env) =>
 {
+    // Thêm environment guard, chặn request trên production
+    if (!env.IsDevelopment() && !env.IsEnvironment("Local"))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
     var conn = db.Database.GetDbConnection();
     if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
 
@@ -474,6 +482,7 @@ namespace Dragon.Business
     [JsonSerializable(typeof(MockSimulateResponse))]
     [JsonSerializable(typeof(PaymentStatusUpdateEvent))]
     [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
+    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentCreatedEvent))]
     [JsonSerializable(typeof(PaymentStatus))]
     [JsonSerializable(typeof(object))]
     [JsonSerializable(typeof(List<TransactionResponse>))]
