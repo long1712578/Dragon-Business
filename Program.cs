@@ -285,11 +285,15 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     string orderId,
     AppDbContext db,
     IStreamProducer producer,
-    IWebHostEnvironment env) =>
+    IWebHostEnvironment env,
+    IConfiguration config) =>
 {
-    // Thêm environment guard, chặn request trên production
-    if (!env.IsDevelopment() && !env.IsEnvironment("Local"))
+    var allowMock = config.GetValue<bool>("AllowMockPayment");
+
+    // Thêm environment guard, chặn request trên production trừ khi được allow manual
+    if (!env.IsDevelopment() && !env.IsEnvironment("Local") && !allowMock)
     {
+        Log.Warning("[MOCK] Blocked simulate-paid request on Production for Order {OrderId}", orderId);
         return Results.StatusCode(StatusCodes.Status403Forbidden);
     }
 
