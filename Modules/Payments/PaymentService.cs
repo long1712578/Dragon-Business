@@ -115,7 +115,14 @@ public class PaymentService
             payment.Status = PaymentStatus.Paid;
             payment.PaidAt = DateTime.UtcNow;
             
-            // Bắn event vào RedisFlow
+            // ĐỒNG BỘ: Auto-complete CafeOrder trực tiếp ngay trong webhook
+            using var cmdOrder = conn.CreateCommand();
+            cmdOrder.CommandText = "UPDATE CafeOrders SET Status = 3, CompletedAt = @now2 WHERE PaymentOrderId = @pid AND Status != 3";
+            var pNow2 = cmdOrder.CreateParameter(); pNow2.ParameterName = "@now2"; pNow2.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdOrder.Parameters.Add(pNow2);
+            var pPid = cmdOrder.CreateParameter(); pPid.ParameterName = "@pid"; pPid.Value = orderId; cmdOrder.Parameters.Add(pPid);
+            await cmdOrder.ExecuteNonQueryAsync();
+
+            // Bắn event vào RedisFlow (chỉ để thông báo realtime ra giao diện)
             await _producer.ProduceAsync(new PaymentSuccessEvent(
                 payment.OrderId,
                 payment.Amount,

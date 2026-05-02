@@ -336,6 +336,13 @@ payments.MapPost("/mock/{orderId}/simulate-paid", async (
     var pNow = cmdLog.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdLog.Parameters.Add(pNow);
     await cmdLog.ExecuteNonQueryAsync();
 
+    // ĐỒNG BỘ: Auto-complete CafeOrder trực tiếp
+    using var cmdOrder = conn.CreateCommand();
+    cmdOrder.CommandText = "UPDATE CafeOrders SET Status = 3, CompletedAt = @now2 WHERE PaymentOrderId = @pid AND Status != 3";
+    var pNow2 = cmdOrder.CreateParameter(); pNow2.ParameterName = "@now2"; pNow2.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdOrder.Parameters.Add(pNow2);
+    var pPid = cmdOrder.CreateParameter(); pPid.ParameterName = "@pid"; pPid.Value = orderId; cmdOrder.Parameters.Add(pPid);
+    await cmdOrder.ExecuteNonQueryAsync();
+
     // Bắn event vào RedisFlow → Consumer sẽ xử lý gửi SignalR Dashboard
     await producer.ProduceAsync(new Dragon.Business.Modules.Payments.PaymentSuccessEvent(
         orderId,

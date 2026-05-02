@@ -88,10 +88,20 @@ const AuthService = {
 };
 
 const ApiService = {
-    async request(path, options = {}) {
+    async request(endpoint, options = {}) {
         const token = AuthService.getToken();
-        const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...options.headers };
-        const res = await fetch(`${CONFIG.API_URL}${path}`, { ...options, headers });
+        const headers = { 
+            'Content-Type': 'application/json', 
+            'Cache-Control': 'no-cache',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}), 
+            ...(options.headers || {}) 
+        };
+        
+        // Thêm timestamp để bypass mọi thể loại cache (Cloudflare/Browser)
+        const separator = endpoint.includes('?') ? '&' : '?';
+        const noCacheEndpoint = `${endpoint}${separator}_t=${Date.now()}`;
+        
+        const res = await fetch(`${CONFIG.API_URL}${noCacheEndpoint}`, { cache: 'no-store', ...options, headers });
         if (res.status === 401) return AuthService.logout();
         if (!res.ok) {
             const err = await res.json().catch(() => ({ message: 'API Error' }));

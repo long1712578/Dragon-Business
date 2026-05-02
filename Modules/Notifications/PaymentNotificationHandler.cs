@@ -25,22 +25,12 @@ public class PaymentNotificationHandler :
     {
         _logger.LogInformation("🔔 [Consumer] Nhận event thanh toán thành công: {OrderId} (MsgId: {MessageId})", message.OrderId, context.Message.Id);
 
-        // Auto-complete CafeOrder nếu gắn với Payment này
-        try {
-            using var scope = _scopeFactory.CreateScope();
-            var cafeOrderService = scope.ServiceProvider.GetRequiredService<Dragon.Business.Modules.Orders.CafeOrderService>();
-            await cafeOrderService.CompleteOrderByPaymentIdAsync(message.OrderId);
-            _logger.LogInformation("✅ [Consumer] Đã auto-complete CafeOrder gắn với Payment {OrderId}", message.OrderId);
-        } catch (Exception ex) {
-            _logger.LogError(ex, "Lỗi khi auto-complete CafeOrder cho Payment {OrderId}", message.OrderId);
-        }
-
         // Gửi thông báo realtime tới Dashboard qua SignalR
         // Lưu ý: Dùng mảng [] cho tham số để chuẩn AOT
         await _hubContext.Clients.All.SendCoreAsync("PaymentStatusUpdated", [new PaymentStatusUpdateEvent(
             message.OrderId,
-            2, // Paid
-            "Paid",
+            3, // Paid
+            "PAID",
             message.Provider,
             message.PaidAt
         )]);
