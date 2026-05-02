@@ -294,11 +294,11 @@ function openOrderModal(staffList) {
     if ($('orderCustomer')) $('orderCustomer').value = '';
     if ($('orderNote')) $('orderNote').value = '';
 
-    // Populate staff select
+    // Populate staff select — dark themed options
     const sel = $('orderStaff');
     if (sel && staffList) {
-        sel.innerHTML = '<option value="">— Chọn nhân viên —</option>' +
-            staffList.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+        sel.innerHTML = '<option value="" style="background:#0d1627;color:#9ca3af">— Chọn nhân viên —</option>' +
+            staffList.map(s => `<option value="${s.id}" style="background:#0d1627;color:#e5e7eb">${esc(s.name)}</option>`).join('');
     }
 
     loadMenu();

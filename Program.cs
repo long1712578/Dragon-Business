@@ -367,7 +367,7 @@ payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest 
     var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmd.Parameters.Add(pId);
     await cmd.ExecuteNonQueryAsync();
 
-    return Results.Ok(new { OrderId = orderId, Status = req.Status });
+    return Results.Ok(new StatusUpdateResponse(orderId, req.Status));
 }).RequireAuthorization("ManagerOnly");
 
 // ═══════════════════════════════════════════════
@@ -387,13 +387,13 @@ menu.MapPost("/", async (CreateProductRequest req, CafeOrderService svc) =>
     if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ErrorResponse("Name required", ""));
     if (req.Price <= 0) return Results.BadRequest(new ErrorResponse("Price must be > 0", ""));
     var id = await svc.CreateProductAsync(req);
-    return Results.Created($"/api/menu/{id}", new { Id = id });
+    return Results.Created($"/api/menu/{id}", new IdResponse(id));
 }).RequireAuthorization("ManagerOnly");
 
 menu.MapPut("/{id:int}/availability", async (int id, AvailabilityRequest req, CafeOrderService svc) =>
 {
     var ok = await svc.UpdateProductAvailabilityAsync(id, req.IsAvailable);
-    return ok ? Results.Ok(new { Id = id, req.IsAvailable }) : Results.NotFound(new ErrorResponse("Product not found", $"ID {id}"));
+    return ok ? Results.Ok(new AvailabilityResponse(id, req.IsAvailable)) : Results.NotFound(new ErrorResponse("Product not found", $"ID {id}"));
 }).RequireAuthorization("ManagerOnly");
 
 menu.MapDelete("/{id:int}", async (int id, CafeOrderService svc) =>
@@ -421,7 +421,7 @@ orders.MapPost("/", async (CreateCafeOrderRequest req, CafeOrderService svc) =>
     {
         if (req.Items == null || req.Items.Count == 0) return Results.BadRequest(new ErrorResponse("Items required", ""));
         var id = await svc.CreateOrderAsync(req);
-        return Results.Created($"/api/orders/{id}", new { Id = id });
+        return Results.Created($"/api/orders/{id}", new IdResponse(id));
     }
     catch (KeyNotFoundException ex) { return Results.NotFound(new ErrorResponse(ex.Message, "")); }
     catch (InvalidOperationException ex) { return Results.BadRequest(new ErrorResponse(ex.Message, "")); }
@@ -430,7 +430,7 @@ orders.MapPost("/", async (CreateCafeOrderRequest req, CafeOrderService svc) =>
 orders.MapPut("/{id:int}/status", async (int id, OrderStatusRequest req, CafeOrderService svc) =>
 {
     var ok = await svc.UpdateStatusAsync(id, (CafeOrderStatus)req.Status);
-    return ok ? Results.Ok(new { Id = id, req.Status }) : Results.NotFound(new ErrorResponse("Order not found", $"ID {id}"));
+    return ok ? Results.Ok(new OrderStatusResponse(id, req.Status)) : Results.NotFound(new ErrorResponse("Order not found", $"ID {id}"));
 }).RequireAuthorization("StaffOnly");
 
 orders.MapPost("/{id:int}/checkout", async (int id, CheckoutRequest req, CafeOrderService svc) =>
@@ -683,7 +683,10 @@ namespace Dragon.Business
     [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CheckoutRequest))]
     [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CheckoutResult))]
     [JsonSerializable(typeof(AvailabilityRequest))]
+    [JsonSerializable(typeof(AvailabilityResponse))]
     [JsonSerializable(typeof(OrderStatusRequest))]
+    [JsonSerializable(typeof(OrderStatusResponse))]
+    [JsonSerializable(typeof(IdResponse))]
     internal partial class AppJsonContext : JsonSerializerContext { }
 
     // Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
@@ -745,7 +748,10 @@ namespace Dragon.Business
     public record ErrorResponse(string Message, string Error);
     public record DeleteResponse(string Message, string Id);
     public record AvailabilityRequest(bool IsAvailable);
+    public record AvailabilityResponse(int Id, bool IsAvailable);
     public record OrderStatusRequest(int Status);
+    public record OrderStatusResponse(int Id, int Status);
+    public record IdResponse(int Id);
     public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
     public record StatusUpdateRequest(int Status);
     public record StatusUpdateResponse(string OrderId, int Status);
