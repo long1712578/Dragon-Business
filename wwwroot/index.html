@@ -123,6 +123,9 @@
             <a href="#" id="navDashboard" class="nav-link active">
                 <i class="fas fa-chart-line w-6"></i> Dashboard
             </a>
+            <a href="#" id="navOrders" class="nav-link">
+                <i class="fas fa-receipt w-6"></i> Orders
+            </a>
             <a href="#" id="navPayments" class="nav-link">
                 <i class="fas fa-wallet w-6"></i> Payments
             </a>
@@ -251,6 +254,78 @@
                     <div class="space-y-6" id="staffList">
                         <!-- Data will be injected here -->
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders View -->
+        <div id="viewOrders" class="view-section hidden">
+            <!-- Order Stats Bar -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="glass-panel p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center text-yellow-400"><i class="fas fa-clock"></i></div>
+                    <div><p class="text-xs text-gray-400">Pending</p><p class="text-2xl font-bold" id="orderStatPending">0</p></div>
+                </div>
+                <div class="glass-panel p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400"><i class="fas fa-blender"></i></div>
+                    <div><p class="text-xs text-gray-400">Preparing</p><p class="text-2xl font-bold" id="orderStatPreparing">0</p></div>
+                </div>
+                <div class="glass-panel p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center text-green-400"><i class="fas fa-check-circle"></i></div>
+                    <div><p class="text-xs text-gray-400">Ready</p><p class="text-2xl font-bold" id="orderStatReady">0</p></div>
+                </div>
+                <div class="glass-panel p-4 flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400"><i class="fas fa-trophy"></i></div>
+                    <div><p class="text-xs text-gray-400">Completed Today</p><p class="text-2xl font-bold" id="orderStatCompleted">0</p></div>
+                </div>
+            </div>
+
+            <!-- Kanban Board + New Order Button -->
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold">Café Order Board</h3>
+                <button id="btnOpenOrderModal"
+                    class="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-2 rounded-full font-semibold hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
+                    <i class="fas fa-plus mr-2"></i> New Order
+                </button>
+            </div>
+
+            <!-- Kanban Columns -->
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <!-- Pending -->
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2 mb-4 px-2">
+                        <div class="w-3 h-3 rounded-full bg-yellow-400 animate-pulse"></div>
+                        <span class="font-bold text-yellow-400 uppercase text-xs tracking-widest">Pending</span>
+                        <span id="badge-pending" class="ml-auto bg-yellow-500/20 text-yellow-400 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                    </div>
+                    <div id="kanban-pending" class="space-y-3 min-h-[200px]"></div>
+                </div>
+                <!-- Preparing -->
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2 mb-4 px-2">
+                        <div class="w-3 h-3 rounded-full bg-blue-400 animate-pulse"></div>
+                        <span class="font-bold text-blue-400 uppercase text-xs tracking-widest">Preparing</span>
+                        <span id="badge-preparing" class="ml-auto bg-blue-500/20 text-blue-400 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                    </div>
+                    <div id="kanban-preparing" class="space-y-3 min-h-[200px]"></div>
+                </div>
+                <!-- Ready -->
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2 mb-4 px-2">
+                        <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                        <span class="font-bold text-green-400 uppercase text-xs tracking-widest">Ready</span>
+                        <span id="badge-ready" class="ml-auto bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                    </div>
+                    <div id="kanban-ready" class="space-y-3 min-h-[200px]"></div>
+                </div>
+                <!-- Completed -->
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-2 mb-4 px-2">
+                        <div class="w-3 h-3 rounded-full bg-purple-400"></div>
+                        <span class="font-bold text-purple-400 uppercase text-xs tracking-widest">Completed</span>
+                        <span id="badge-completed" class="ml-auto bg-purple-500/20 text-purple-400 text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                    </div>
+                    <div id="kanban-completed" class="space-y-3 min-h-[200px]"></div>
                 </div>
             </div>
         </div>
@@ -431,12 +506,140 @@
         </div>
     </div>
 
+    <!-- ═══════════════════ ORDER CREATION MODAL ═══════════════════ -->
+    <div id="orderModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[200] hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-5xl bg-[#0d1627] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col" style="max-height:92vh">
+            <!-- Header -->
+            <div class="flex justify-between items-center p-6 bg-gradient-to-r from-emerald-900/40 to-teal-900/40 border-b border-white/5 flex-shrink-0">
+                <div>
+                    <h3 class="text-2xl font-bold text-emerald-400">New Café Order</h3>
+                    <p class="text-xs text-gray-400 mt-1">Chọn món → thêm vào giỏ → Checkout</p>
+                </div>
+                <button id="btnCloseOrderModal" class="text-gray-400 hover:text-white w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 transition-all">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-1 overflow-hidden">
+                <!-- Left: Product Menu -->
+                <div class="flex-1 p-6 overflow-y-auto border-r border-white/5">
+                    <!-- Order Info -->
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Số bàn *</label>
+                            <input id="orderTable" type="text" value="1" placeholder="e.g. 1, A2, VIP"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Tên khách (tuỳ chọn)</label>
+                            <input id="orderCustomer" type="text" placeholder="e.g. Nguyễn Văn A"
+                                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                        </div>
+                    </div>
+                    <div class="mb-5">
+                        <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Ghi chú đơn</label>
+                        <input id="orderNote" type="text" placeholder="e.g. Không đá, ít đường..."
+                            class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-emerald-500 transition-colors">
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div class="flex gap-2 mb-5 flex-wrap" id="categoryFilters">
+                        <button data-cat="" class="cat-btn active-cat px-4 py-1.5 rounded-full text-xs font-bold border border-emerald-500/50 text-emerald-400 bg-emerald-500/10">Tất cả</button>
+                        <button data-cat="Drip Coffee" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">☕ Phin</button>
+                        <button data-cat="Coffee" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">🧋 Espresso</button>
+                        <button data-cat="Signature" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">⭐ Signature</button>
+                        <button data-cat="Tea" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">🍵 Trà</button>
+                        <button data-cat="Smoothie" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">🥤 Sinh tố</button>
+                        <button data-cat="Refreshing" class="cat-btn px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 text-gray-400 hover:border-emerald-500/50 hover:text-emerald-400 transition-all">💧 Thanh nhiệt</button>
+                    </div>
+
+                    <!-- Product Grid -->
+                    <div id="menuProductGrid" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div class="text-center text-gray-500 col-span-3 py-8">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Loading menu...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Cart -->
+                <div class="w-80 flex-shrink-0 flex flex-col p-6 bg-white/2">
+                    <h4 class="text-sm font-bold uppercase tracking-widest text-gray-400 mb-4">
+                        <i class="fas fa-shopping-cart mr-2 text-emerald-400"></i> Giỏ hàng
+                    </h4>
+                    <div id="orderCart" class="flex-1 overflow-y-auto space-y-2 mb-4 min-h-[100px]">
+                        <p class="text-gray-500 text-xs text-center pt-8">Chưa có món nào</p>
+                    </div>
+                    <div class="border-t border-white/10 pt-4 space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400 text-sm">Tổng cộng</span>
+                            <span class="text-xl font-bold text-emerald-400" id="cartTotal">đ0</span>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Nhân viên</label>
+                            <select id="orderStaff" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                                <!-- Injected by JS -->
+                            </select>
+                        </div>
+                        <button id="btnConfirmOrder"
+                            class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm">
+                            <i class="fas fa-check mr-2"></i> Tạo đơn hàng
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ ORDER DETAIL / CHECKOUT MODAL ═══════════════════ -->
+    <div id="orderDetailModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150] hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-[#0d1627] rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+            <div class="flex justify-between items-center p-6 border-b border-white/5">
+                <div>
+                    <h3 class="text-xl font-bold" id="orderDetailTitle">Order #</h3>
+                    <p class="text-xs text-gray-400 mt-1" id="orderDetailTable">Bàn: —</p>
+                </div>
+                <button id="btnCloseOrderDetail" class="text-gray-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div id="orderDetailItems" class="space-y-2 mb-6 max-h-60 overflow-y-auto"></div>
+                <div class="border-t border-white/10 pt-4">
+                    <div class="flex justify-between mb-4">
+                        <span class="text-gray-400">Total</span>
+                        <span class="text-xl font-bold text-emerald-400" id="orderDetailTotal">đ0</span>
+                    </div>
+                    <!-- Status Update -->
+                    <div class="grid grid-cols-2 gap-3 mb-4" id="orderDetailActions">
+                        <!-- Rendered by JS based on current status -->
+                    </div>
+                    <!-- Checkout section -->
+                    <div id="checkoutSection" class="hidden pt-3 border-t border-white/5 space-y-3">
+                        <p class="text-xs text-gray-400 uppercase tracking-wider font-bold">Thanh toán</p>
+                        <select id="checkoutProvider" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                            <option value="Mock">🎭 Mock (Giả lập)</option>
+                            <option value="ZaloPay">💳 ZaloPay</option>
+                        </select>
+                        <button id="btnCheckout"
+                            class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 py-3 rounded-xl font-bold shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm">
+                            <i class="fas fa-qrcode mr-2"></i> Tạo QR Payment
+                        </button>
+                        <div id="checkoutResult" class="hidden p-4 bg-cyan-500/5 rounded-xl border border-cyan-500/10 text-center">
+                            <p class="text-xs text-gray-400 mb-2">Payment QR Ready</p>
+                            <a id="checkoutPayLink" href="#" target="_blank" class="text-cyan-400 text-sm font-mono hover:underline break-all block"></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- SignalR Client -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <!-- type="module": script chạy trong module scope riêng biệt
          → const/let không bao giờ leak ra window → FIX PERMANENT cho bug 'already declared'
          → Defer tự động → DOM luôn sẵn sàng khi script chạy
          → Browser chỉ execute script này đúng 1 lần duy nhất -->
-    <script type="module" src="js/dashboard.js?v=1.0.3"></script>
+    <script type="module" src="js/dashboard.js?v=2.0.0"></script>
 </body>
 </html>

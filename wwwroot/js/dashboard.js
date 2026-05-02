@@ -1,9 +1,8 @@
 /**
- * Dragon PayHub — Senior-Grade Dashboard Core
- * 
- * Architecture: Reactive State Management (Store Pattern)
- * Style: Clean Architecture / ES Modules / SPA Routing
+ * Dragon PayHub — Senior-Grade Dashboard Core v2.0
+ * Order Management + Payment Integration
  */
+import { initOrderModule, refreshOrders } from './orders.js';
 
 const CONFIG = Object.freeze({
     API_URL:      '/api',
@@ -267,6 +266,7 @@ const Actions = {
         try {
             await AuthService.login(u, p);
             this.refreshData();
+            initOrderModule(() => Store.state.staff);
         } catch (e) { alert(e.message); }
     },
 
@@ -397,8 +397,12 @@ document.addEventListener('DOMContentLoaded', () => {
     Store.subscribe(state => UI.sync(state));
 
     // Nav
-    ['Dashboard', 'Payments', 'Staff', 'Settings'].forEach(v => {
-        UI.el(`nav${v}`).onclick = (e) => { e.preventDefault(); Store.setState({ currentView: v }); };
+    ['Dashboard', 'Orders', 'Payments', 'Staff', 'Settings'].forEach(v => {
+        UI.el(`nav${v}`)?.addEventListener('click', (e) => {
+            e.preventDefault();
+            Store.setState({ currentView: v });
+            if (v === 'Orders') refreshOrders();
+        });
     });
 
     // Modals
@@ -439,6 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Store.setState({ isLoggedIn: true, user: { name: localStorage.getItem(CONFIG.STORAGE_KEYS.USER), role: AuthService.getRoles()[0] } });
         Actions.refreshData();
         UI.connectRealtime();
+        initOrderModule(() => Store.state.staff);
         setInterval(() => Actions.refreshData(), CONFIG.REFRESH_INTERVAL);
     }
 });

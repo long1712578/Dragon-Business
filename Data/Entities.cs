@@ -60,11 +60,62 @@ public class Transaction
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+// ─── Café Order Management Entities ───────────────────────────
+
+public class CafeProduct
+{
+    public int Id { get; set; }
+    [Required, StringLength(100)]
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = "Coffee"; // Coffee, Tea, Food, Other
+    public decimal Price { get; set; }
+    public bool IsAvailable { get; set; } = true;
+    public string? ImageUrl { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class CafeOrder
+{
+    public int Id { get; set; }
+    public string TableNumber { get; set; } = "1";
+    public string? CustomerName { get; set; }
+    public string? Note { get; set; }
+    public decimal TotalAmount { get; set; }
+    public CafeOrderStatus Status { get; set; } = CafeOrderStatus.Pending;
+    public string? StaffId { get; set; }
+    public string? PaymentOrderId { get; set; } // Link đến Payment.OrderId sau khi checkout
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? CompletedAt { get; set; }
+}
+
+public class CafeOrderItem
+{
+    public int Id { get; set; }
+    public int CafeOrderId { get; set; }
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty; // Denormalized cho Native AOT
+    public decimal UnitPrice { get; set; }
+    public int Quantity { get; set; }
+    public string? CustomNote { get; set; } // e.g., "ít đường", "không đá"
+}
+
+public enum CafeOrderStatus
+{
+    Pending   = 0, // Mới tạo, đang chờ
+    Preparing = 1, // Đang pha chế
+    Ready     = 2, // Xong, chờ khách lấy
+    Completed = 3, // Đã thanh toán & hoàn tất
+    Cancelled = 4  // Đã hủy
+}
+
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
     public DbSet<StaffMember> StaffMembers => Set<StaffMember>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<CafeProduct> CafeProducts => Set<CafeProduct>();
+    public DbSet<CafeOrder> CafeOrders => Set<CafeOrder>();
+    public DbSet<CafeOrderItem> CafeOrderItems => Set<CafeOrderItem>();
 }
 
