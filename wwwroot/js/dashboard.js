@@ -243,11 +243,11 @@ const UI = {
             .withAutomaticReconnect()
             .build();
 
-        connection.on("PaymentReceived", (msg) => {
+        connection.on("PaymentStatusUpdated", (msg) => {
             console.log("Realtime notification:", msg);
             Actions.refreshData();
             // Show a small toast or notification if possible
-            alert(`${msg.title}\n${msg.message}`);
+            alert(`Payment ${msg.statusName}: ${msg.orderId}`);
         });
 
         connection.start().catch(err => console.error("SignalR Error:", err));
@@ -277,6 +277,11 @@ const Actions = {
                 ApiService.request('/payments')
             ]);
             Store.setState({ staff, payments });
+            
+            // Auto refresh orders if in Orders view
+            if (Store.state.currentView === 'Orders') {
+                refreshOrders();
+            }
         } catch (e) { console.error(e); }
     },
 

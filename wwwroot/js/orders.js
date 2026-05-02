@@ -276,10 +276,23 @@ async function doCheckout() {
         const resultEl = $('checkoutResult');
         if (res.paymentUrl) {
             linkEl.href = res.paymentUrl;
-            linkEl.textContent = provider === 'Mock' ? '📱 Mock QR Link' : res.paymentUrl;
+            linkEl.textContent = provider === 'Mock' ? 'Mở link thanh toán 🔗' : 'Mở ứng dụng ZaloPay 🔗';
+            
+            // Hiển thị ảnh QR
+            let qrImg = $('checkoutQrImg');
+            if (!qrImg) {
+                qrImg = document.createElement('img');
+                qrImg.id = 'checkoutQrImg';
+                qrImg.style.cssText = 'width:200px;height:200px;border-radius:12px;display:block;margin:12px auto;border:4px solid rgba(99,179,237,0.3)';
+                resultEl.insertBefore(qrImg, linkEl);
+            }
+            qrImg.src = res.paymentUrl;
+            qrImg.style.display = 'block';
+
         } else {
             linkEl.href = '#';
             linkEl.textContent = `Payment ID: ${res.paymentOrderId}`;
+            if ($('checkoutQrImg')) $('checkoutQrImg').style.display = 'none';
         }
         resultEl.classList.remove('hidden');
         await refreshOrders();

@@ -255,6 +255,20 @@ public class CafeOrderService
         return await cmd.ExecuteNonQueryAsync() > 0;
     }
 
+    public async Task CompleteOrderByPaymentIdAsync(string paymentOrderId)
+    {
+        var conn = _db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+        
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE CafeOrders SET Status = @st, CompletedAt = @now WHERE PaymentOrderId = @pid AND Status != @st";
+        var pSt = cmd.CreateParameter(); pSt.ParameterName = "@st"; pSt.Value = (int)CafeOrderStatus.Completed; cmd.Parameters.Add(pSt);
+        var pNow = cmd.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmd.Parameters.Add(pNow);
+        var pPid = cmd.CreateParameter(); pPid.ParameterName = "@pid"; pPid.Value = paymentOrderId; cmd.Parameters.Add(pPid);
+        
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     /// <summary>
     /// Checkout: tạo Payment QR cho một CafeOrder đang ở trạng thái Ready.
     /// Liên kết CafeOrder.PaymentOrderId với Payment.OrderId sau khi thành công.
