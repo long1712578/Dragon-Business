@@ -220,7 +220,7 @@
         try {
             // Gọi API simulate-paid — cùng origin với app
             const baseUrl = window.location.origin;
-            const res = await fetch(`${baseUrl}/api/payments/mock/${orderId}/simulate-paid`, {
+            const res = await fetch(`${baseUrl}/api/v1/payments/mock/${orderId}/simulate-paid`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });

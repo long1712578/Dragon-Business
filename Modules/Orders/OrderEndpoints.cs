@@ -1,4 +1,5 @@
 using Dragon.Business.Data;
+using Dragon.Business.Configuration;
 
 namespace Dragon.Business.Modules.Orders;
 
@@ -6,8 +7,8 @@ public static class OrderEndpoints
 {
     public static RouteGroupBuilder MapCafeOrderEndpoints(this RouteGroupBuilder group)
     {
-        var orders = group.MapGroup("/orders").WithTags("Café Orders");
-        var menu = group.MapGroup("/menu").WithTags("Café Menu");
+        var orders = group.MapGroup("/v1/orders").WithTags("Café Orders v1");
+        var menu = group.MapGroup("/v1/menu").WithTags("Café Menu v1");
 
         // ── Menu / Products ──────────────────────────
         menu.MapGet("/", async (CafeOrderService svc, string? category) =>
@@ -16,11 +17,10 @@ public static class OrderEndpoints
 
         menu.MapPost("/", async (CreateProductRequest req, CafeOrderService svc) =>
         {
-            if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ErrorResponse("Name required", ""));
-            if (req.Price <= 0) return Results.BadRequest(new ErrorResponse("Price must be > 0", ""));
             var id = await svc.CreateProductAsync(req);
-            return Results.Created($"/api/menu/{id}", new IdResponse(id));
-        }).RequireAuthorization("ManagerOnly");
+            return Results.Created($"/api/v1/menu/{id}", new IdResponse(id));
+        }).RequireAuthorization("ManagerOnly")
+          .WithValidator<CreateProductRequest>();
 
         menu.MapPut("/{id:int}/availability", async (int id, AvailabilityRequest req, CafeOrderService svc) =>
         {
@@ -51,13 +51,13 @@ public static class OrderEndpoints
         {
             try
             {
-                if (req.Items == null || req.Items.Count == 0) return Results.BadRequest(new ErrorResponse("Items required", ""));
                 var id = await svc.CreateOrderAsync(req);
-                return Results.Created($"/api/orders/{id}", new IdResponse(id));
+                return Results.Created($"/api/v1/orders/{id}", new IdResponse(id));
             }
             catch (KeyNotFoundException ex) { return Results.NotFound(new ErrorResponse(ex.Message, "")); }
             catch (InvalidOperationException ex) { return Results.BadRequest(new ErrorResponse(ex.Message, "")); }
-        }).RequireAuthorization("StaffOnly");
+        }).RequireAuthorization("StaffOnly")
+          .WithValidator<CreateCafeOrderRequest>();
 
         orders.MapPut("/{id:int}/status", async (int id, OrderStatusRequest req, CafeOrderService svc) =>
         {

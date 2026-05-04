@@ -6,7 +6,7 @@ public static class StaffEndpoints
 {
     public static RouteGroupBuilder MapStaffEndpoints(this RouteGroupBuilder group)
     {
-        var staff = group.MapGroup("/staff").WithTags("Staff");
+        var staff = group.MapGroup("/v1/staff").WithTags("Staff v1");
 
         staff.MapGet("/", async (StaffService staffService) =>
         {

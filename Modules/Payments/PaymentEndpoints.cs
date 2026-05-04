@@ -9,7 +9,7 @@ public static class PaymentEndpoints
 {
     public static RouteGroupBuilder MapPaymentEndpoints(this RouteGroupBuilder group)
     {
-        var payments = group.MapGroup("/payments").WithTags("Payments");
+        var payments = group.MapGroup("/v1/payments").WithTags("Payments v1");
 
         payments.MapGet("/", async (AppDbContext db) =>
         {
@@ -29,7 +29,7 @@ public static class PaymentEndpoints
                     Status = (PaymentStatus)reader.GetInt32(3),
                     Provider = reader.GetString(4),
                     StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
-                    CreatedAt = DateTime.Parse(reader.GetString(6)),
+                    CreatedAt = DateTime.SpecifyKind(DateTime.Parse(reader.GetString(6)), DateTimeKind.Utc),
                     PaymentUrl = reader.IsDBNull(7) ? null : reader.GetString(7)
                 });
             }
@@ -64,7 +64,7 @@ public static class PaymentEndpoints
                     Status = (PaymentStatus)reader.GetInt32(3),
                     Provider = reader.GetString(4),
                     StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
-                    CreatedAt = DateTime.Parse(reader.GetString(6))
+                    CreatedAt = DateTime.SpecifyKind(DateTime.Parse(reader.GetString(6)), DateTimeKind.Utc)
                 });
             }
             return Results.NotFound(new ErrorResponse("Payment not found", orderId));

@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using RedisFlow.Extensions;
 using RedisFlow.Abstractions;
 using Dragon.Business.Hubs;
+using FluentValidation;
 
 internal class Program
 {
@@ -83,6 +84,9 @@ internal class Program
         builder.Services.AddScoped<PaymentService>();
         builder.Services.AddScoped<StaffService>();
         builder.Services.AddScoped<CafeOrderService>();
+        
+        // FluentValidation DI
+        builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
         // 8. RedisFlow Event Streaming Configuration (Native AOT Compatible)
         builder.Services.AddRedisFlow(flow =>

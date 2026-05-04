@@ -33,7 +33,7 @@ async function api(path, opts = {}) {
     const separator = path.includes('?') ? '&' : '?';
     const noCachePath = `${path}${separator}_t=${Date.now()}`;
     
-    const res = await fetch(`/api${noCachePath}`, { cache: 'no-store', ...opts, headers });
+    const res = await fetch(`/api/v1${noCachePath}`, { cache: 'no-store', ...opts, headers });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ message: 'API Error' }));
         throw new Error(err.message || 'Request failed');

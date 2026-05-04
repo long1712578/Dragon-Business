@@ -282,6 +282,35 @@ public class CafeOrderService
         if (order.Status == (int)CafeOrderStatus.Completed)
             throw new InvalidOperationException("Order is already completed");
 
+        // --- ENTERPRISE FIX: Payment Session Locking ---
+        // Nếu order đã có 1 mã thanh toán, kiểm tra xem nó còn hiệu lực (Pending) không
+        var conn = _db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
+
+        if (!string.IsNullOrEmpty(order.PaymentOrderId))
+        {
+            using var cmdCheck = conn.CreateCommand();
+            cmdCheck.CommandText = "SELECT Status, CreatedAt, PaymentUrl, Provider FROM Payments WHERE OrderId = @pid";
+            var pCheckPid = cmdCheck.CreateParameter(); pCheckPid.ParameterName = "@pid"; pCheckPid.Value = order.PaymentOrderId; cmdCheck.Parameters.Add(pCheckPid);
+            
+            using var reader = await cmdCheck.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                var pStatus = reader.GetInt32(0);
+                var pCreated = DateTime.Parse(reader.GetString(1));
+                var pUrl = reader.IsDBNull(2) ? null : reader.GetString(2);
+                var pProv = reader.GetString(3);
+                
+                // Nếu QR code tạo chưa quá 15 phút và chưa thanh toán -> Tái sử dụng (Idempotent Generate)
+                if (pStatus == 0 && (DateTime.UtcNow - pCreated).TotalMinutes < 15)
+                {
+                    _logger.LogInformation("Re-using active Payment Session {PaymentId} for Order #{OrderId}", order.PaymentOrderId, orderId);
+                    return new CheckoutResult(orderId, order.PaymentOrderId, pUrl, pProv, order.TotalAmount);
+                }
+            }
+            await reader.CloseAsync();
+        }
+
         var description = $"Thanh toan Order #{orderId} - Ban {order.TableNumber} - {string.Join(", ", order.Items.Select(i => $"{i.ProductName} x{i.Quantity}"))}";
         
         var payment = await _paymentService.CreatePaymentRequestAsync(
@@ -292,8 +321,6 @@ public class CafeOrderService
         );
 
         // Link Payment → CafeOrder
-        var conn = _db.Database.GetDbConnection();
-        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "UPDATE CafeOrders SET PaymentOrderId = @pid WHERE Id = @id";
         var pPid = cmd.CreateParameter(); pPid.ParameterName = "@pid"; pPid.Value = payment.OrderId; cmd.Parameters.Add(pPid);

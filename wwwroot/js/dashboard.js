@@ -5,7 +5,7 @@
 import { initOrderModule, refreshOrders } from './orders.js';
 
 const CONFIG = Object.freeze({
-    API_URL:      '/api',
+    API_URL:      '/api/v1',
     SSO_TOKEN:    window.location.hostname === 'localhost' 
                     ? 'https://localhost:7001/connect/token' 
                     : 'https://sso.longdev.store/connect/token',
@@ -365,7 +365,7 @@ const Actions = {
             UI.el('paymentLink').onclick = async (e) => {
                 e.preventDefault();
                 if (confirm(`Giả lập thanh toán thành công cho đơn hàng #${res.orderId}?`)) {
-                    await fetch(`/api/payments/mock/${res.orderId}/simulate-paid`, { method: 'POST' });
+                    await fetch(`/api/v1/payments/mock/${res.orderId}/simulate-paid`, { method: 'POST' });
                     UI.el('paymentModal').classList.add('hidden');
                 }
             };

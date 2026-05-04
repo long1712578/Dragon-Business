@@ -88,6 +88,20 @@ public class PaymentService
 
         // Native AOT: FindAsync an toàn hơn dynamic LINQ
         var payment = await _db.Payments.FindAsync(orderId);
+        
+        if (payment == null) 
+        {
+            _logger.LogWarning("Webhook received for unknown order {OrderId}", orderId);
+            return true; // Return true so provider stops retrying
+        }
+
+        // --- IDEMPOTENT WEBHOOK ---
+        if (payment.Status == PaymentStatus.Paid)
+        {
+            _logger.LogInformation("Idempotency triggered: Order {OrderId} is already paid. Ignoring duplicate webhook.", orderId);
+            return true; // Already processed
+        }
+
         if (payment != null && payment.Status != PaymentStatus.Paid)
         {
             // Native AOT: Dùng SQL UPDATE thô để tránh Model Building crash
