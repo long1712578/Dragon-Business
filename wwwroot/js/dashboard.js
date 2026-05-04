@@ -256,8 +256,19 @@ const UI = {
         connection.on("PaymentStatusUpdated", (msg) => {
             console.log("Realtime notification:", msg);
             Actions.refreshData();
-            // Show a small toast or notification if possible
-            alert(`Payment ${msg.statusName}: ${msg.orderId}`);
+            
+            // Auto-refresh transaction modal if it is open for this order
+            const tModal = UI.el('transactionModal');
+            if (tModal && !tModal.classList.contains('hidden')) {
+                const subtitle = UI.el('transactionModalSubtitle').textContent;
+                if (subtitle.includes(msg.orderId)) {
+                    Actions.viewTransactions(msg.orderId);
+                }
+            }
+
+            // Show a small toast or notification
+            const statusText = msg.statusText || msg.StatusText || 'Updated';
+            alert(`[REALTIME] Payment ${statusText}: ${msg.orderId || msg.OrderId}`);
         });
 
         connection.start().catch(err => console.error("SignalR Error:", err));
