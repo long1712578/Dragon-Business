@@ -1,9 +1,11 @@
 using System.Text.Json.Serialization;
 using Dragon.Business;
 using Dragon.Business.Data;
+using Dragon.Business.Infrastructure.Data;
 using Dragon.Business.Modules.Orders;
 using Dragon.Business.Modules.Payments;
 using Dragon.Business.Modules.Staff;
+using Dragon.Business.Modules.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http.Json;
 using Scalar.AspNetCore;
@@ -11,767 +13,168 @@ using Serilog;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using RedisFlow.Extensions;
 using RedisFlow.Abstractions;
-using Microsoft.AspNetCore.SignalR;
+using Dragon.Business.Hubs;
 
-var builder = WebApplication.CreateSlimBuilder(args);
-
-// 1. Serilog Enterprise Logging
-Log.Logger = new LoggerConfiguration()
-    .WriteTo.Console()
-    .CreateLogger();
-builder.Host.UseSerilog();
-
-// 2. AOT JSON Context Configuration
-builder.Services.Configure<JsonOptions>(options =>
+internal class Program
 {
-    options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
-});
-
-// 3. Infrastructure & DB
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=/app/Data/dragon.db")
-           .UseModel(Dragon.Business.Data.CompiledModels.AppDbContextModel.Instance));
-
-// 4. OpenAPI & Scalar
-builder.Services.AddOpenApi();
-
-// 5. Authentication & Authorization (SSO)
-builder.Services.AddAuthentication("Bearer")
-    .AddJwtBearer("Bearer", options =>
+    private static async Task Main(string[] args)
     {
-        // Public Authority for Issuer matching (iss claim in token)
-        options.Authority = builder.Configuration["SSO:Authority"] ?? "https://sso.longdev.store";
-        
-        // Enterprise Pattern: Internal Backchannel for OIDC Metadata in K8s
-        var metadataAddress = builder.Configuration["SSO:MetadataAddress"];
-        if (!string.IsNullOrEmpty(metadataAddress))
+        var builder = WebApplication.CreateSlimBuilder(args);
+
+        // 1. Serilog Enterprise Logging
+        Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateLogger();
+        builder.Host.UseSerilog();
+
+        // 2. AOT JSON Context Configuration
+        builder.Services.Configure<JsonOptions>(options =>
         {
-            options.MetadataAddress = metadataAddress;
-            // Allow HTTP for internal cluster service-to-service communication
-            options.RequireHttpsMetadata = metadataAddress.StartsWith("https://");
-            
-            // LỖI IDX10500: JWKS URI trong metadata vẫn trỏ ra public internet (https://sso.longdev.store/...)
-            // Do đó ta cần chặn request này và điều hướng nó về mạng nội bộ K8s.
-            if (Uri.TryCreate(options.Authority, UriKind.Absolute, out var publicUri) &&
-                Uri.TryCreate(metadataAddress, UriKind.Absolute, out var internalUri))
+            options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default);
+        });
+
+        // 3. Infrastructure & DB
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=/app/Data/dragon.db")
+                   .UseModel(Dragon.Business.Data.CompiledModels.AppDbContextModel.Instance));
+
+        // 4. OpenAPI & Scalar
+        builder.Services.AddOpenApi();
+
+        // 5. Authentication & Authorization (SSO)
+        builder.Services.AddAuthentication("Bearer")
+            .AddJwtBearer("Bearer", options =>
             {
-                options.BackchannelHttpHandler = new InternalOidcRoutingHandler(publicUri.Host, internalUri.Host, internalUri.Port);
-            }
-        }
+                options.Authority = builder.Configuration["SSO:Authority"] ?? "https://sso.longdev.store";
 
-        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
-        {
-            ValidateAudience = false,
-            // Đảm bảo khớp issuer có hoặc không có dấu '/' ở cuối
-            ValidIssuers = new[] { options.Authority, options.Authority.TrimEnd('/') + "/" }
-        };
-    });
-
-builder.Services.AddAuthorization(options =>
-{
-    // Roles khớp với SSO seed: 'admin' và 'employee'
-    options.AddPolicy("ManagerOnly", policy => policy.RequireRole("admin"));
-    options.AddPolicy("StaffOnly",   policy => policy.RequireRole("admin", "employee"));
-});
-
-// 6. Enterprise Health Checks
-builder.Services.AddHealthChecks()
-    .AddDbContextCheck<AppDbContext>()
-    .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
-
-// 7. Dependency Injection
-builder.Services.AddHttpContextAccessor(); // Cần cho MockPaymentProvider
-builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
-builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
-builder.Services.AddScoped<PaymentService>();
-builder.Services.AddScoped<StaffService>();
-builder.Services.AddScoped<CafeOrderService>();
-
-// 8. RedisFlow Event Streaming Configuration (Native AOT Compatible)
-builder.Services.AddRedisFlow(flow =>
-{
-    flow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379")
-        .AddProducer("payments")
-        .AddConsumer("payments", "business-group", consumer => {
-            consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentSuccessEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
-            consumer.AddHandler<Dragon.Business.Modules.Payments.PaymentCreatedEvent, Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
-        });
-    
-    // Ép RedisFlow dùng AppJsonContext để không bị crash AOT
-    flow.UseSerializer<AotRedisSerializer>();
-});
-
-// Đăng ký Handler vào DI (Cần thiết cho AOT)
-builder.Services.AddTransient<Dragon.Business.Modules.Notifications.PaymentNotificationHandler>();
-
-builder.Services.AddSignalR().AddJsonProtocol(options => {
-    options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, Dragon.Business.Hubs.HubJsonContext.Default);
-    options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(1, Dragon.Business.AppJsonContext.Default);
-});
-
-var app = builder.Build();
-
-// 8. Global Error Handling
-app.Use(async (context, next) => {
-    try { await next(); }
-    catch (Exception ex) {
-        Log.Error(ex, "Unhandled exception occurred");
-        context.Response.StatusCode = 500;
-        await context.Response.WriteAsJsonAsync(new ErrorResponse("An internal server error occurred.", ex.Message), AppJsonContext.Default.ErrorResponse);
-    }
-});
-
-app.UseAuthentication();
-app.UseAuthorization();
-
-// Serve Dashboard với Cache-Control để tự động update code mới (Cache Busting)
-app.UseDefaultFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    OnPrepareResponse = ctx =>
-    {
-        // Với index.html và các file .js, .css -> Luôn yêu cầu trình duyệt check bản mới (revalidate)
-        if (ctx.File.Name.EndsWith(".html") || ctx.File.Name.EndsWith(".js") || ctx.File.Name.EndsWith(".css"))
-        {
-            ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
-            ctx.Context.Response.Headers.Append("Pragma", "no-cache");
-            ctx.Context.Response.Headers.Append("Expires", "0");
-        }
-        else
-        {
-            // Các file static khác (ảnh, font) có thể cache lâu hơn (7 ngày)
-            ctx.Context.Response.Headers.Append("Cache-Control", "public, max-age=604800");
-        }
-    }
-});
-
-// Mapping Health Checks
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
-app.MapHub<Dragon.Business.Hubs.NotificationHub>("/hub/notifications");
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = r => r.Tags.Contains("ready") });
-
-app.MapOpenApi();
-app.MapScalarApiReference(options =>
-{
-    options.WithTitle("Dragon Business API")
-           .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
-});
-
-// Module: Payments
-var payments = app.MapGroup("/api/payments").WithTags("Payments");
-
-payments.MapGet("/", async (AppDbContext db) => {
-    // Native AOT: Bỏ qua hoàn toàn EF Query Compiler để tránh lỗi 'Query wasn't precompiled'
-    var result = new List<Payment>();
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt, PaymentUrl FROM Payments ORDER BY CreatedAt DESC LIMIT 50";
-    using var reader = await cmd.ExecuteReaderAsync();
-    while (await reader.ReadAsync())
-    {
-        result.Add(new Payment {
-            OrderId = reader.GetString(0),
-            Amount = reader.GetDecimal(1),
-            Description = reader.GetString(2),
-            Status = (PaymentStatus)reader.GetInt32(3),
-            Provider = reader.GetString(4),
-            StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
-            CreatedAt = DateTime.Parse(reader.GetString(6)),
-            PaymentUrl = reader.IsDBNull(7) ? null : reader.GetString(7)
-        });
-    }
-    return Results.Ok(result);
-}).RequireAuthorization("StaffOnly");
-
-payments.MapPost("/create", async (PaymentCreateRequest req, PaymentService paymentService) => {
-    var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId);
-    return Results.Ok(result);
-}).RequireAuthorization("StaffOnly");
-
-payments.MapGet("/{orderId}", async (string orderId, AppDbContext db) => {
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT OrderId, Amount, Description, Status, Provider, StaffId, CreatedAt FROM Payments WHERE OrderId = @id";
-    var pId = cmd.CreateParameter();
-    pId.ParameterName = "@id";
-    pId.Value = orderId;
-    cmd.Parameters.Add(pId);
-    
-    using var reader = await cmd.ExecuteReaderAsync();
-    if (await reader.ReadAsync())
-    {
-        return Results.Ok(new Payment {
-            OrderId = reader.GetString(0),
-            Amount = reader.GetDecimal(1),
-            Description = reader.GetString(2),
-            Status = (PaymentStatus)reader.GetInt32(3),
-            Provider = reader.GetString(4),
-            StaffId = reader.IsDBNull(5) ? null : reader.GetString(5),
-            CreatedAt = DateTime.Parse(reader.GetString(6))
-        });
-    }
-    return Results.NotFound(new ErrorResponse("Payment not found", orderId));
-}).RequireAuthorization("StaffOnly");
-
-payments.MapDelete("/{orderId}", async (string orderId, AppDbContext db) => {
-    var conn = db.Database.GetDbConnection();
-    await conn.OpenAsync();
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "DELETE FROM Payments WHERE OrderId = @id";
-    var pId = cmd.CreateParameter();
-    pId.ParameterName = "@id";
-    pId.Value = orderId;
-    cmd.Parameters.Add(pId);
-    
-    var affected = await cmd.ExecuteNonQueryAsync();
-    return affected > 0 
-        ? Results.Ok(new DeleteResponse("Payment deleted", orderId)) 
-        : Results.NotFound(new ErrorResponse("Payment not found", orderId));
-}).RequireAuthorization("ManagerOnly");
-
-payments.MapPost("/webhook/zalopay", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
-    var signature = context.Request.Headers["x-zalopay-signature"].ToString();
-    var success = await paymentService.ProcessWebhookAsync("ZaloPay", req.JsonContent, signature, req.OrderId);
-    return success ? Results.Ok(new { return_code = 1, return_message = "success" }) : Results.BadRequest();
-}).AllowAnonymous();
-
-payments.MapPost("/webhook/momo", async (HttpContext context, WebhookRequest req, PaymentService paymentService) => {
-    // MoMo gửi signature qua header hoặc body, tuỳ setup. Ở đây làm mẫu:
-    var signature = context.Request.Headers["x-momo-signature"].ToString();
-    var success = await paymentService.ProcessWebhookAsync("MoMo", req.JsonContent, signature, req.OrderId);
-    return success ? Results.Ok(new { resultCode = 0, message = "success" }) : Results.BadRequest();
-}).AllowAnonymous();
-
-// Lấy danh sách logs (Transactions) của một Order
-payments.MapGet("/{orderId}/transactions", async (string orderId, AppDbContext db) => {
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
-    
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "SELECT Id, Content, CreatedAt FROM Transactions WHERE OrderId = @id ORDER BY CreatedAt DESC";
-    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmd.Parameters.Add(pId);
-    
-    using var reader = await cmd.ExecuteReaderAsync();
-    var list = new List<TransactionResponse>();
-    while (await reader.ReadAsync())
-    {
-        list.Add(new TransactionResponse(
-            reader.GetInt32(0),
-            orderId,
-            reader.GetString(1),
-            reader.GetString(2)
-        ));
-    }
-    return Results.Ok(list);
-}).RequireAuthorization("StaffOnly");
-
-// ═══════════════════════════════════════════════
-// MOCK PAYMENT SYSTEM — Dev/Staging only
-// ═══════════════════════════════════════════════
-
-// [1] Tạo QR code giả lập — trả về ảnh QR từ api.qrserver.com (miễn phí)
-payments.MapPost("/create-mock", async (PaymentCreateRequest req, PaymentService paymentService) => {
-    var result = await paymentService.CreatePaymentRequestAsync(req.Amount, req.Desc, req.StaffId, "Mock");
-    return Results.Ok(new MockPaymentResponse(
-        result.OrderId, 
-        result.PaymentUrl ?? "", 
-        "Mock", 
-        "Scan QR bằng phone hoặc dùng API simulate-paid để giả lập"
-    ));
-}).RequireAuthorization("StaffOnly");
-
-// [2] Simulate-paid — phone tap vào sau khi scan QR, không cần token
-payments.MapPost("/mock/{orderId}/simulate-paid", async (
-    string orderId,
-    AppDbContext db,
-    IStreamProducer producer,
-    IWebHostEnvironment env,
-    IConfiguration config) =>
-{
-    var allowMock = config.GetValue<bool>("AllowMockPayment");
-
-    // Thêm environment guard, chặn request trên production trừ khi được allow manual
-    if (!env.IsDevelopment() && !env.IsEnvironment("Local") && !allowMock)
-    {
-        Log.Warning("[MOCK] Blocked simulate-paid request on Production for Order {OrderId}", orderId);
-        return Results.StatusCode(StatusCodes.Status403Forbidden);
-    }
-
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
-
-    // Lấy thông tin đơn hàng
-    using var cmdCheck = conn.CreateCommand();
-    cmdCheck.CommandText = "SELECT Status, Amount, StaffId, Provider FROM Payments WHERE OrderId = @id";
-    var pCheck = cmdCheck.CreateParameter(); pCheck.ParameterName = "@id"; pCheck.Value = orderId; cmdCheck.Parameters.Add(pCheck);
-    
-    using var reader = await cmdCheck.ExecuteReaderAsync();
-    if (!await reader.ReadAsync()) return Results.NotFound(new ErrorResponse("Payment not found", orderId));
-    
-    var currentStatus = reader.GetInt32(0);
-    var amount = reader.GetDecimal(1);
-    var staffId = reader.IsDBNull(2) ? null : reader.GetString(2);
-    var provider = reader.GetString(3);
-    
-    if (currentStatus == (int)PaymentStatus.Paid)
-        return Results.BadRequest(new ErrorResponse("Already paid", orderId));
-
-    await reader.CloseAsync();
-
-    // Cập nhật trạng thái → Paid
-    using var cmdUpdate = conn.CreateCommand();
-    cmdUpdate.CommandText = "UPDATE Payments SET Status = @status, PaidAt = @paidAt WHERE OrderId = @id";
-    var pStat = cmdUpdate.CreateParameter(); pStat.ParameterName = "@status"; pStat.Value = (int)PaymentStatus.Paid; cmdUpdate.Parameters.Add(pStat);
-    var pPaid = cmdUpdate.CreateParameter(); pPaid.ParameterName = "@paidAt"; pPaid.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdUpdate.Parameters.Add(pPaid);
-    var pId = cmdUpdate.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmdUpdate.Parameters.Add(pId);
-    await cmdUpdate.ExecuteNonQueryAsync();
-
-    // Lưu Transaction Audit Log cho Mockup
-    using var cmdLog = conn.CreateCommand();
-    cmdLog.CommandText = "INSERT INTO Transactions (OrderId, Content, CreatedAt) VALUES (@id, @content, @now)";
-    var pIdL = cmdLog.CreateParameter(); pIdL.ParameterName = "@id"; pIdL.Value = orderId; cmdLog.Parameters.Add(pIdL);
-    var pCnt = cmdLog.CreateParameter(); pCnt.ParameterName = "@content"; pCnt.Value = "{\"message\":\"Mock payment successful via simulate-paid API\"}"; cmdLog.Parameters.Add(pCnt);
-    var pNow = cmdLog.CreateParameter(); pNow.ParameterName = "@now"; pNow.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdLog.Parameters.Add(pNow);
-    await cmdLog.ExecuteNonQueryAsync();
-
-    // ĐỒNG BỘ: Auto-complete CafeOrder trực tiếp
-    using var cmdOrder = conn.CreateCommand();
-    cmdOrder.CommandText = "UPDATE CafeOrders SET Status = 3, CompletedAt = @now2 WHERE PaymentOrderId = @pid AND Status != 3";
-    var pNow2 = cmdOrder.CreateParameter(); pNow2.ParameterName = "@now2"; pNow2.Value = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"); cmdOrder.Parameters.Add(pNow2);
-    var pPid = cmdOrder.CreateParameter(); pPid.ParameterName = "@pid"; pPid.Value = orderId; cmdOrder.Parameters.Add(pPid);
-    await cmdOrder.ExecuteNonQueryAsync();
-
-    // Bắn event vào RedisFlow → Consumer sẽ xử lý gửi SignalR Dashboard
-    await producer.ProduceAsync(new Dragon.Business.Modules.Payments.PaymentSuccessEvent(
-        orderId,
-        amount,
-        staffId,
-        DateTime.UtcNow,
-        provider
-    ));
-
-    Log.Information("[MOCK] Payment {OrderId} marked as Paid via simulate-paid and event produced", orderId);
-    return Results.Ok(new MockSimulateResponse(true, orderId, "Paid"));
-}).AllowAnonymous(); // Phone không có token — AllowAnonymous là đúng
-
-// Admin: cập nhật trạng thái payment thủ công
-payments.MapPut("/{orderId}/status", async (string orderId, StatusUpdateRequest req, AppDbContext db) => {
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
-
-    // Check exists first
-    using var cmdCheck = conn.CreateCommand();
-    cmdCheck.CommandText = "SELECT COUNT(1) FROM Payments WHERE OrderId = @id";
-    var pCheckId = cmdCheck.CreateParameter(); pCheckId.ParameterName = "@id"; pCheckId.Value = orderId; cmdCheck.Parameters.Add(pCheckId);
-    var count = Convert.ToInt64(await cmdCheck.ExecuteScalarAsync());
-    if (count == 0) return Results.NotFound(new ErrorResponse("Payment not found", $"ID {orderId}"));
-
-    using var cmd = conn.CreateCommand();
-    cmd.CommandText = "UPDATE Payments SET Status = @status WHERE OrderId = @id";
-    var pStatus = cmd.CreateParameter(); pStatus.ParameterName = "@status"; pStatus.Value = req.Status; cmd.Parameters.Add(pStatus);
-    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = orderId; cmd.Parameters.Add(pId);
-    await cmd.ExecuteNonQueryAsync();
-
-    return Results.Ok(new StatusUpdateResponse(orderId, req.Status));
-}).RequireAuthorization("ManagerOnly");
-
-// ═══════════════════════════════════════════════
-// MODULE: CAFÉ ORDER MANAGEMENT
-// ═══════════════════════════════════════════════
-
-var orders = app.MapGroup("/api/orders").WithTags("Café Orders");
-var menu   = app.MapGroup("/api/menu").WithTags("Café Menu");
-
-// ── Menu / Products ──────────────────────────
-menu.MapGet("/", async (CafeOrderService svc, string? category) =>
-    Results.Ok(await svc.GetProductsAsync(category))
-).RequireAuthorization("StaffOnly");
-
-menu.MapPost("/", async (CreateProductRequest req, CafeOrderService svc) =>
-{
-    if (string.IsNullOrWhiteSpace(req.Name)) return Results.BadRequest(new ErrorResponse("Name required", ""));
-    if (req.Price <= 0) return Results.BadRequest(new ErrorResponse("Price must be > 0", ""));
-    var id = await svc.CreateProductAsync(req);
-    return Results.Created($"/api/menu/{id}", new IdResponse(id));
-}).RequireAuthorization("ManagerOnly");
-
-menu.MapPut("/{id:int}/availability", async (int id, AvailabilityRequest req, CafeOrderService svc) =>
-{
-    var ok = await svc.UpdateProductAvailabilityAsync(id, req.IsAvailable);
-    return ok ? Results.Ok(new AvailabilityResponse(id, req.IsAvailable)) : Results.NotFound(new ErrorResponse("Product not found", $"ID {id}"));
-}).RequireAuthorization("ManagerOnly");
-
-menu.MapDelete("/{id:int}", async (int id, CafeOrderService svc) =>
-{
-    var ok = await svc.DeleteProductAsync(id);
-    return ok ? Results.Ok(new DeleteResponse("Product deleted", id.ToString())) : Results.NotFound(new ErrorResponse("Product not found", $"ID {id}"));
-}).RequireAuthorization("ManagerOnly");
-
-// ── Orders ────────────────────────────────────
-orders.MapGet("/", async (CafeOrderService svc, int? status) =>
-{
-    CafeOrderStatus? st = status.HasValue ? (CafeOrderStatus)status.Value : null;
-    return Results.Ok(await svc.GetOrdersAsync(st));
-}).RequireAuthorization("StaffOnly");
-
-orders.MapGet("/{id:int}", async (int id, CafeOrderService svc) =>
-{
-    var order = await svc.GetOrderByIdAsync(id);
-    return order is null ? Results.NotFound(new ErrorResponse("Order not found", $"ID {id}")) : Results.Ok(order);
-}).RequireAuthorization("StaffOnly");
-
-orders.MapPost("/", async (CreateCafeOrderRequest req, CafeOrderService svc) =>
-{
-    try
-    {
-        if (req.Items == null || req.Items.Count == 0) return Results.BadRequest(new ErrorResponse("Items required", ""));
-        var id = await svc.CreateOrderAsync(req);
-        return Results.Created($"/api/orders/{id}", new IdResponse(id));
-    }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new ErrorResponse(ex.Message, "")); }
-    catch (InvalidOperationException ex) { return Results.BadRequest(new ErrorResponse(ex.Message, "")); }
-}).RequireAuthorization("StaffOnly");
-
-orders.MapPut("/{id:int}/status", async (int id, OrderStatusRequest req, CafeOrderService svc) =>
-{
-    var ok = await svc.UpdateStatusAsync(id, (CafeOrderStatus)req.Status);
-    return ok ? Results.Ok(new OrderStatusResponse(id, req.Status)) : Results.NotFound(new ErrorResponse("Order not found", $"ID {id}"));
-}).RequireAuthorization("StaffOnly");
-
-orders.MapPost("/{id:int}/checkout", async (int id, CheckoutRequest req, CafeOrderService svc) =>
-{
-    try
-    {
-        var result = await svc.CheckoutOrderAsync(id, req.Provider ?? "Mock", req.StaffId);
-        return Results.Ok(result);
-    }
-    catch (KeyNotFoundException ex) { return Results.NotFound(new ErrorResponse(ex.Message, "")); }
-    catch (InvalidOperationException ex) { return Results.BadRequest(new ErrorResponse(ex.Message, "")); }
-}).RequireAuthorization("StaffOnly");
-
-orders.MapDelete("/{id:int}", async (int id, CafeOrderService svc) =>
-{
-    var ok = await svc.DeleteOrderAsync(id);
-    return ok ? Results.Ok(new DeleteResponse("Order deleted", id.ToString())) : Results.NotFound(new ErrorResponse("Order not found", $"ID {id}"));
-}).RequireAuthorization("ManagerOnly");
-
-// Module: Staff
-var staff = app.MapGroup("/api/staff").WithTags("Staff");
-
-staff.MapGet("/", async (StaffService staffService) => {
-    var result = await staffService.GetAllStaffWithStatsAsync();
-    return Results.Ok(result);
-}).RequireAuthorization("StaffOnly");
-
-staff.MapPost("/", async (StaffCreateRequest req, StaffService staffService) => {
-    var result = await staffService.CreateStaffAsync(req.Name, req.Role);
-    return Results.Ok(result);
-}).RequireAuthorization("ManagerOnly");
-
-// Admin: xóa staff
-staff.MapDelete("/{id:int}", async (int id, AppDbContext db) => {
-    var member = await db.StaffMembers.FindAsync(id);
-    if (member == null) return Results.NotFound(new ErrorResponse("Staff not found", $"ID {id}"));
-    db.StaffMembers.Remove(member);
-    await db.SaveChangesAsync();
-    return Results.Ok(new DeleteResponse("Staff deleted", id.ToString()));
-}).RequireAuthorization("ManagerOnly");
-
-// Module: Dev Helper
-app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) => {
-    var key2 = config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
-    using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key2));
-    var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(req.Data));
-    var mac = Convert.ToHexString(hash).ToLower();
-    return Results.Ok(new SignResponse(req.Data, mac));
-}).WithTags("Dev Helper");
-
-// Seed Database — 100% raw SQL, không dùng LINQ (không tương thích Native AOT)
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    
-    // 1. Tạo bảng và Migration (idempotent)
-    var seedSql = @"
-        CREATE TABLE IF NOT EXISTS ""StaffMembers"" (
-            ""Id""        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            ""Name""      TEXT    NOT NULL,
-            ""Role""      TEXT    NOT NULL,
-            ""CreatedAt"" TEXT    NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS ""Payments"" (
-            ""OrderId""     TEXT    NOT NULL PRIMARY KEY,
-            ""TransId""     TEXT    NULL,
-            ""Amount""      DECIMAL NOT NULL DEFAULT 0,
-            ""Description"" TEXT    NULL,
-            ""Status""      INTEGER NOT NULL DEFAULT 0,
-            ""Provider""    TEXT    NOT NULL DEFAULT 'ZaloPay',
-            ""StaffId""     TEXT    NULL,
-            ""CreatedAt""   TEXT    NOT NULL DEFAULT (datetime('now')),
-            ""PaidAt""      TEXT    NULL,
-            ""PaymentUrl""  TEXT    NULL
-        );
-        CREATE INDEX IF NOT EXISTS ""idx_payments_staff"" ON ""Payments"" (""StaffId"");
-        CREATE INDEX IF NOT EXISTS ""idx_payments_status"" ON ""Payments"" (""Status"");
-
-        CREATE TABLE IF NOT EXISTS ""Transactions"" (
-            ""Id""        INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            ""OrderId""   TEXT    NOT NULL DEFAULT '',
-            ""Content""   TEXT    NOT NULL DEFAULT '',
-            ""CreatedAt"" TEXT    NOT NULL DEFAULT ''
-        );
-
-        CREATE TABLE IF NOT EXISTS ""CafeProducts"" (
-            ""Id""          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            ""Name""        TEXT    NOT NULL,
-            ""Category""    TEXT    NOT NULL DEFAULT 'Coffee',
-            ""Price""       DECIMAL NOT NULL DEFAULT 0,
-            ""IsAvailable"" INTEGER NOT NULL DEFAULT 1,
-            ""ImageUrl""    TEXT    NULL,
-            ""CreatedAt""   TEXT    NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS ""idx_cafeproducts_category"" ON ""CafeProducts"" (""Category"");
-
-        CREATE TABLE IF NOT EXISTS ""CafeOrders"" (
-            ""Id""             INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            ""TableNumber""    TEXT    NOT NULL DEFAULT '1',
-            ""CustomerName""   TEXT    NULL,
-            ""Note""           TEXT    NULL,
-            ""TotalAmount""    DECIMAL NOT NULL DEFAULT 0,
-            ""Status""         INTEGER NOT NULL DEFAULT 0,
-            ""StaffId""        TEXT    NULL,
-            ""PaymentOrderId"" TEXT    NULL,
-            ""CreatedAt""      TEXT    NOT NULL DEFAULT (datetime('now')),
-            ""CompletedAt""    TEXT    NULL
-        );
-        CREATE INDEX IF NOT EXISTS ""idx_cafeorders_status""   ON ""CafeOrders"" (""Status"");
-        CREATE INDEX IF NOT EXISTS ""idx_cafeorders_created""  ON ""CafeOrders"" (""CreatedAt"");
-
-        CREATE TABLE IF NOT EXISTS ""CafeOrderItems"" (
-            ""Id""          INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-            ""CafeOrderId"" INTEGER NOT NULL,
-            ""ProductId""   INTEGER NOT NULL,
-            ""ProductName"" TEXT    NOT NULL DEFAULT '',
-            ""UnitPrice""   DECIMAL NOT NULL DEFAULT 0,
-            ""Quantity""    INTEGER NOT NULL DEFAULT 1,
-            ""CustomNote"" TEXT    NULL
-        );
-        CREATE INDEX IF NOT EXISTS ""idx_cafeorderitems_order"" ON ""CafeOrderItems"" (""CafeOrderId"");
-    ";
-    await db.Database.ExecuteSqlRawAsync(seedSql);
-
-    // HACK: Tự động thêm cột PaymentUrl nếu chưa có
-    try {
-        await db.Database.ExecuteSqlRawAsync("ALTER TABLE Payments ADD COLUMN PaymentUrl TEXT NULL;");
-    } catch { /* Đã tồn tại */ }
-
-    // 2. Seed staff nếu chưa có
-    var conn = db.Database.GetDbConnection();
-    if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync();
-    using var cmd = conn.CreateCommand();
-    
-    cmd.CommandText = "SELECT COUNT(*) FROM StaffMembers";
-    var count = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
-    if (count == 0)
-    {
-        cmd.CommandText = @"
-            INSERT INTO StaffMembers (Name, Role, CreatedAt) VALUES
-                ('Long Pham',        'TechLead', datetime('now')),
-                ('Dragon Employee',  'Barista',  datetime('now'));
-        ";
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    // Seed Café Menu — Trung Nguyên Legend (batch INSERT, VPS-optimized)
-    cmd.CommandText = "SELECT COUNT(*) FROM CafeProducts";
-    var productCount = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
-    if (productCount == 0)
-    {
-        // 1 batch INSERT duy nhất → tối thiểu round-trip, tốt cho SQLite trên VPS giới hạn RAM
-        cmd.CommandText = @"
-            INSERT INTO CafeProducts (Name, Category, Price, IsAvailable, CreatedAt) VALUES
-            -- ═══ NĂNG LƯỢNG SÁNG TẠO (Phin/Hot - Drip Coffee) ═══
-            ('Năng Lượng Tư Duy - Sáng Tạo 1',     'Drip Coffee', 34000, 1, datetime('now')),
-            ('Năng Lượng Khám Phá - Sáng Tạo 2',   'Drip Coffee', 42000, 1, datetime('now')),
-            ('Năng Lượng Ý Tưởng - Sáng Tạo 3',    'Drip Coffee', 44000, 1, datetime('now')),
-            ('Năng Lượng Sáng Tạo - Sáng Tạo 4',   'Drip Coffee', 45000, 1, datetime('now')),
-            ('Năng Lượng Thành Công - Sáng Tạo 5', 'Drip Coffee', 48000, 1, datetime('now')),
-            ('Năng Lượng Đột Phá - Sáng Tạo 8',    'Drip Coffee', 69000, 1, datetime('now')),
-            -- ═══ NĂNG LƯỢNG KẾT NỐI (Espresso Based) ═══
-            ('Success Đá Viên',         'Coffee', 40000, 1, datetime('now')),
-            ('Success Sữa Đá',          'Coffee', 45000, 1, datetime('now')),
-            ('Cà Phê Bọt Biển',         'Coffee', 44000, 1, datetime('now')),
-            ('Bạc Xỉu',                 'Coffee', 44000, 1, datetime('now')),
-            ('Cà Phê Mother Land',      'Coffee', 48000, 1, datetime('now')),
-            ('Cà Phê L''amour',         'Coffee', 48000, 1, datetime('now')),
-            ('Espresso',                'Coffee', 44000, 1, datetime('now')),
-            ('Double Espresso',         'Coffee', 51000, 1, datetime('now')),
-            ('Cà Phê Tonic Trái Cây',  'Coffee', 55000, 1, datetime('now')),
-            ('Latte With Jelly',        'Coffee', 55000, 1, datetime('now')),
-            ('Caramel Macchiato',       'Coffee', 59000, 1, datetime('now')),
-            ('Cà Phê Affogato',         'Coffee', 62000, 1, datetime('now')),
-            ('Cà Phê Đá Xay Socola',   'Coffee', 62000, 1, datetime('now')),
-            ('Cà Phê Đá Xay Caramel',  'Coffee', 62000, 1, datetime('now')),
-            ('Cà Phê Hoa Hồng',         'Coffee', 62000, 1, datetime('now')),
-            ('Cà Phê Khoai Môn',        'Coffee', 69000, 1, datetime('now')),
-            ('Americano',               'Coffee', 51000, 1, datetime('now')),
-            ('Cappuccino',              'Coffee', 55000, 1, datetime('now')),
-            ('Latte',                   'Coffee', 59000, 1, datetime('now')),
-            -- ═══ NĂNG LƯỢNG GIÀU CÓ (Signature) ═══
-            ('Legend Coffee Signature', 'Signature', 150000, 1, datetime('now')),
-            ('Cà Phê Mè (Set)',         'Signature',  69000, 1, datetime('now')),
-            ('Cà Phê Dừa (Set)',        'Signature',  69000, 1, datetime('now')),
-            ('Cà Phê Trứng',            'Signature',  69000, 1, datetime('now')),
-            -- ═══ NĂNG LƯỢNG THANH NHIỆT (Refreshing) ═══
-            ('Nước Suối',               'Refreshing', 15000, 1, datetime('now')),
-            ('Sữa Tươi Đá',             'Refreshing', 34000, 1, datetime('now')),
-            ('Sữa Tươi Nóng',           'Refreshing', 41000, 1, datetime('now')),
-            ('Sinh Tố Chanh Dây',       'Smoothie',   48000, 1, datetime('now')),
-            ('Kim Quất Đá Xay',         'Smoothie',   48000, 1, datetime('now')),
-            ('Sữa Chua Đá',             'Refreshing', 48000, 1, datetime('now')),
-            ('Cacao Sữa',               'Refreshing', 48000, 1, datetime('now')),
-            ('Trà Xanh Thạch Cà Phê',  'Tea',        55000, 1, datetime('now')),
-            ('Trà Sữa Legend',          'Tea',        55000, 1, datetime('now')),
-            ('Sinh Tố Bơ',              'Smoothie',   62000, 1, datetime('now')),
-            ('Sinh Tố Dâu',             'Smoothie',   62000, 1, datetime('now')),
-            ('Soda Táo Quế',            'Refreshing', 62000, 1, datetime('now')),
-            ('Trà Vải Hoa Hồng',        'Tea',        62000, 1, datetime('now'));
-        ";
-        await cmd.ExecuteNonQueryAsync();
-        Log.Information("[Seed] Seeded 43 Trung Nguyen Legend menu items");
-    }
-}
-
-app.Run();
-
-namespace Dragon.Business
-{
-    // AOT-Friendly JSON Source Generation
-    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
-    [JsonSerializable(typeof(ErrorResponse))]
-    [JsonSerializable(typeof(Payment))]
-    [JsonSerializable(typeof(List<Payment>))]
-    [JsonSerializable(typeof(StaffMember))]
-    [JsonSerializable(typeof(List<StaffMember>))]
-    [JsonSerializable(typeof(StaffMemberWithStats))]
-    [JsonSerializable(typeof(List<StaffMemberWithStats>))]
-    [JsonSerializable(typeof(PaymentCreateRequest))]
-    [JsonSerializable(typeof(PaymentRequestResponse))]
-    [JsonSerializable(typeof(StatusUpdateRequest))]
-    [JsonSerializable(typeof(StatusUpdateResponse))]
-    [JsonSerializable(typeof(StaffCreateRequest))]
-    [JsonSerializable(typeof(WebhookRequest))]
-    [JsonSerializable(typeof(WebhookResponse))]
-    [JsonSerializable(typeof(SignRequest))]
-    [JsonSerializable(typeof(SignResponse))]
-    [JsonSerializable(typeof(DeleteResponse))]
-    [JsonSerializable(typeof(MockPaymentResponse))]
-    [JsonSerializable(typeof(MockSimulateResponse))]
-    [JsonSerializable(typeof(PaymentStatusUpdateEvent))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentSuccessEvent))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Payments.PaymentCreatedEvent))]
-    [JsonSerializable(typeof(PaymentStatus))]
-    [JsonSerializable(typeof(object))]
-    [JsonSerializable(typeof(List<TransactionResponse>))]
-    // ── Café Order Management ──
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CafeProductRow))]
-    [JsonSerializable(typeof(List<Dragon.Business.Modules.Orders.CafeProductRow>))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CafeOrderSummaryRow))]
-    [JsonSerializable(typeof(List<Dragon.Business.Modules.Orders.CafeOrderSummaryRow>))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CafeOrderDetailRow))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CafeOrderItemRow))]
-    [JsonSerializable(typeof(List<Dragon.Business.Modules.Orders.CafeOrderItemRow>))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CreateCafeOrderRequest))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CafeOrderItemRequest))]
-    [JsonSerializable(typeof(List<Dragon.Business.Modules.Orders.CafeOrderItemRequest>))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CreateProductRequest))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CheckoutRequest))]
-    [JsonSerializable(typeof(Dragon.Business.Modules.Orders.CheckoutResult))]
-    [JsonSerializable(typeof(AvailabilityRequest))]
-    [JsonSerializable(typeof(AvailabilityResponse))]
-    [JsonSerializable(typeof(OrderStatusRequest))]
-    [JsonSerializable(typeof(OrderStatusResponse))]
-    [JsonSerializable(typeof(IdResponse))]
-    internal partial class AppJsonContext : JsonSerializerContext { }
-
-    // Serializer tùy chỉnh cho RedisFlow để hỗ trợ Native AOT (100% không dùng reflection)
-    public class AotRedisSerializer : RedisFlow.Abstractions.IMessageSerializer
-    {
-        public AotRedisSerializer() { } // Cần constructor public cho DI
-
-        public byte[] Serialize<T>(T obj)
-        {
-            var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
-            return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(obj, (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)typeInfo);
-        }
-
-        public T Deserialize<T>(byte[] data)
-        {
-            var typeInfo = AppJsonContext.Default.GetTypeInfo(typeof(T)) ?? throw new NotSupportedException($"Type {typeof(T)} not in AOT Context");
-            return (T)System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
-        }
-
-        public object Deserialize(byte[] data, Type type)
-        {
-            var typeInfo = AppJsonContext.Default.GetTypeInfo(type) 
-                ?? throw new InvalidOperationException($"Type {type} not found in AppJsonContext");
-            return System.Text.Json.JsonSerializer.Deserialize(data, typeInfo)!;
-        }
-    }
-
-    // Handler chặn các request gọi ra Authority (public internet) và bẻ lái vào mạng LAN
-    public class InternalOidcRoutingHandler : DelegatingHandler
-    {
-        private readonly string _publicHost;
-        private readonly string _internalHost;
-        private readonly int _internalPort;
-
-        public InternalOidcRoutingHandler(string publicHost, string internalHost, int internalPort)
-        {
-            _publicHost = publicHost;
-            _internalHost = internalHost;
-            _internalPort = internalPort;
-            InnerHandler = new SocketsHttpHandler();
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            if (request.RequestUri?.Host == _publicHost)
-            {
-                var builder = new UriBuilder(request.RequestUri)
+                var metadataAddress = builder.Configuration["SSO:MetadataAddress"];
+                if (!string.IsNullOrEmpty(metadataAddress))
                 {
-                    Host = _internalHost,
-                    Port = _internalPort,
-                    Scheme = "http"
-                };
-                request.RequestUri = builder.Uri;
-            }
-            return base.SendAsync(request, cancellationToken);
-        }
-    }
+                    options.MetadataAddress = metadataAddress;
+                    options.RequireHttpsMetadata = metadataAddress.StartsWith("https://");
 
-    public record ErrorResponse(string Message, string Error);
-    public record DeleteResponse(string Message, string Id);
-    public record AvailabilityRequest(bool IsAvailable);
-    public record AvailabilityResponse(int Id, bool IsAvailable);
-    public record OrderStatusRequest(int Status);
-    public record OrderStatusResponse(int Id, int Status);
-    public record IdResponse(int Id);
-    public record PaymentCreateRequest(decimal Amount, string Desc, string StaffId);
-    public record StatusUpdateRequest(int Status);
-    public record StatusUpdateResponse(string OrderId, int Status);
-    public record StaffCreateRequest(string Name, string Role);
-    public record WebhookRequest(string JsonContent, string OrderId);
-    public record WebhookResponse(int return_code, string return_message);
-    public record SignRequest(string Data);
-    public record SignResponse(string Data, string Mac);
-    public record TransactionResponse(int Id, string OrderId, string Content, string CreatedAt);
-    public record PaymentRequestResponse(string OrderId, string? PaymentUrl, string Provider);
-    
-    // Mock Payment Records
-    public record MockPaymentResponse(string OrderId, string QrImageUrl, string Provider, string Message);
-    public record MockSimulateResponse(bool Success, string OrderId, string Status);
-    public record PaymentStatusUpdateEvent(string OrderId, int Status, string StatusText, string Provider, DateTimeOffset PaidAt);
+                    if (Uri.TryCreate(options.Authority, UriKind.Absolute, out var publicUri) &&
+                        Uri.TryCreate(metadataAddress, UriKind.Absolute, out var internalUri))
+                    {
+                        options.BackchannelHttpHandler = new InternalOidcRoutingHandler(publicUri.Host, internalUri.Host, internalUri.Port);
+                    }
+                }
+
+                options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateAudience = false,
+                    ValidIssuers = new[] { options.Authority, options.Authority.TrimEnd('/') + "/" }
+                };
+            });
+
+        builder.Services.AddAuthorization(options =>
+        {
+            options.AddPolicy("ManagerOnly", policy => policy.RequireRole("admin"));
+            options.AddPolicy("StaffOnly", policy => policy.RequireRole("admin", "employee"));
+        });
+
+        // 6. Enterprise Health Checks
+        builder.Services.AddHealthChecks()
+            .AddDbContextCheck<AppDbContext>()
+            .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
+
+        // 7. Dependency Injection
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<IPaymentProvider, ZaloPayAdapter>();
+        builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
+        builder.Services.AddScoped<PaymentService>();
+        builder.Services.AddScoped<StaffService>();
+        builder.Services.AddScoped<CafeOrderService>();
+
+        // 8. RedisFlow Event Streaming Configuration (Native AOT Compatible)
+        builder.Services.AddRedisFlow(flow =>
+        {
+            flow.WithRedis(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379")
+                .AddProducer("payments")
+                .AddConsumer("payments", "business-group", consumer =>
+                {
+                    consumer.AddHandler<PaymentSuccessEvent, PaymentNotificationHandler>();
+                    consumer.AddHandler<PaymentCreatedEvent, PaymentNotificationHandler>();
+                });
+
+            flow.UseSerializer<AotRedisSerializer>();
+        });
+
+        builder.Services.AddTransient<PaymentNotificationHandler>();
+
+        builder.Services.AddSignalR().AddJsonProtocol(options =>
+        {
+            options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, HubJsonContext.Default);
+            options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(1, AppJsonContext.Default);
+        });
+
+        var app = builder.Build();
+
+        // 8. Global Error Handling
+        app.Use(async (context, next) =>
+        {
+            try { await next(); }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Unhandled exception occurred");
+                context.Response.StatusCode = 500;
+                await context.Response.WriteAsJsonAsync(new ErrorResponse("An internal server error occurred.", ex.Message), AppJsonContext.Default.ErrorResponse);
+            }
+        });
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        // Serve Dashboard với Cache-Control
+        app.UseDefaultFiles();
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            OnPrepareResponse = ctx =>
+            {
+                if (ctx.File.Name.EndsWith(".html") || ctx.File.Name.EndsWith(".js") || ctx.File.Name.EndsWith(".css"))
+                {
+                    ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+                    ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+                    ctx.Context.Response.Headers.Append("Expires", "0");
+                }
+                else
+                {
+                    ctx.Context.Response.Headers.Append("Cache-Control", "public, max-age=604800");
+                }
+            }
+        });
+
+        // 9. API Routing
+        app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+        app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = r => r.Tags.Contains("ready") });
+        app.MapHub<NotificationHub>("/hub/notifications");
+        
+        app.MapOpenApi();
+        app.MapScalarApiReference(options =>
+        {
+            options.WithTitle("Dragon Business API")
+                   .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+        });
+
+        // ═══════════════════════════════════════════════
+        // MAP FEATURES / MODULES
+        // ═══════════════════════════════════════════════
+        var api = app.MapGroup("/api");
+        api.MapPaymentEndpoints();
+        api.MapCafeOrderEndpoints();
+        api.MapStaffEndpoints();
+
+        // Dev Helper Endpoint
+        app.MapPost("/api/dev/webhook/sign", (SignRequest req, IConfiguration config) =>
+        {
+            var key2 = config["ZaloPay:Key2"] ?? "Iyz2LcUDt69876zY8v6968h76z6895pzed";
+            using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(key2));
+            var hash = hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(req.Data));
+            var mac = Convert.ToHexString(hash).ToLower();
+            return Results.Ok(new SignResponse(req.Data, mac));
+        }).WithTags("Dev Helper");
+
+        // 10. Database Initialization
+        await DatabaseInitializer.InitializeAsync(app.Services);
+
+        app.Run();
+    }
 }
