@@ -57,14 +57,14 @@ public class PaymentServiceTests : IDisposable
         // Assert
         result.Should().NotBeNull();
         result.PaymentUrl.Should().Be(expectedUrl);
-        result.ProviderName.Should().Be("ZaloPay");
+        result.Provider.Should().Be("ZaloPay");
         result.OrderId.Should().NotBeNullOrEmpty();
 
         // Verify event was published
         _mockProducer.Verify(
-            p => p.ProduceAsync(It.Is<PaymentCreatedEvent>(e => 
-                e.Amount == amount && 
-                e.Provider == "ZaloPay")),
+            p => p.ProduceAsync(
+                It.Is<PaymentCreatedEvent>(e => e.Amount == amount && e.Provider == "ZaloPay"),
+                It.IsAny<CancellationToken>()),
             Times.Once
         );
     }
