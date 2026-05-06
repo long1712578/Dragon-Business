@@ -1,5 +1,6 @@
 using Dragon.Business.Data;
 using Dragon.Business.Modules.Payments;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using RedisFlow.Abstractions;
 
@@ -12,12 +13,16 @@ public class PaymentServiceTests : IDisposable
     private readonly Mock<ILogger<PaymentService>> _mockLogger;
     private readonly Mock<IStreamProducer> _mockProducer;
     private readonly PaymentService _sut;
+    private readonly SqliteConnection _sqliteConn;
 
     public PaymentServiceTests()
     {
-        // Setup in-memory database for testing
+        // SQLite in-memory: required because PaymentService uses GetDbConnection() (relational-specific)
+        _sqliteConn = new SqliteConnection("DataSource=:memory:");
+        _sqliteConn.Open();
+
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .UseSqlite(_sqliteConn)
             .Options;
 
         _dbContext = new AppDbContext(options);
@@ -143,5 +148,6 @@ public class PaymentServiceTests : IDisposable
     public void Dispose()
     {
         _dbContext?.Dispose();
+        _sqliteConn?.Dispose();
     }
 }
