@@ -1,79 +1,36 @@
-name: Build and Deploy Dragon PayHub (AOT)
+name: "Dragon Business: CI/CD"
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
     paths:
-      - '**'
+      - '**/*.cs'
+      - '**/*.csproj'
+      - 'Dockerfile'
+      - '.github/workflows/**'
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: long1712578/dragon-business
-  K8S_CONFIG_REPO: long1712578/Dragon-k8s-config
-
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  actions: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+  # ✅ Phase 1: Build, Test, Trivy Source Scan
+  ci:
+    uses: long1712578/Dragon-k8s-config/.github/workflows/reusable-dotnet-ci.yml@master
+    with:
+      dotnet-version: '9.0.x'
+      solution-path: 'Dragon.Business.csproj'
+      test-path: 'Dragon.Business.Tests/Dragon.Business.Tests.csproj'
+    secrets: inherit
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.GHCR_TOKEN }} # Cần token có quyền đọc repo khác
-
-
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=develop-
-            type=raw,value=develop-latest
-            type=raw,value=latest
-
-      - name: Build and push AOT Image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-
-  update-manifest:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout K8s Config Repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.K8S_CONFIG_REPO }}
-          token: ${{ secrets.GHCR_TOKEN }}
-          path: k8s-config
-
-      - name: Update image tag
-        run: |
-          IMAGE_TAG="develop-${{ github.sha }}"
-          sed -i "s|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG:0:15}|g" k8s-config/deploy/develop/dragon-business.yaml
-          
-      - name: Commit and push changes
-        run: |
-          cd k8s-config
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "chore: update dragon-business image to develop-${{ github.sha }}"
-          git push
+  # 🐳 Phase 2: Docker Build (Native AOT), Image Scan, GitOps Update
+  cd:
+    needs: ci
+    uses: long1712578/Dragon-k8s-config/.github/workflows/reusable-docker-gitops.yml@master
+    with:
+      service-name: 'dragon-business'
+      docker-context: '.'
+      environment: 'develop'
+    secrets: inherit
