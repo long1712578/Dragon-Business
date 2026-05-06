@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <RootNamespace>Dragon.Business</RootNamespace>
-    <DefaultItemExcludes>$(DefaultItemExcludes);External\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);External\**;Dragon.Business.Tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
 
