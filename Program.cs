@@ -73,9 +73,16 @@ internal class Program
         });
 
         // 6. Enterprise Health Checks
+        // TAGS giải thích:
+        //   /health/live  → Predicate = _ => false  → bỏ qua TẤT CẢ checks (chỉ test app còn sống)
+        //   /health/ready → Predicate = r => r.Tags.Contains("ready") → chỉ chạy checks có tag "ready"
         builder.Services.AddHealthChecks()
-            .AddDbContextCheck<AppDbContext>()
-            .AddRedis(builder.Configuration["Redis"] ?? "localhost:6379", name: "redis");
+            .AddDbContextCheck<AppDbContext>(
+                tags: new[] { "ready" })                                              // chỉ chạy khi gọi /health/ready
+            .AddRedis(
+                builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379",  // khớp với ConnectionStrings__Redis trong K8s manifest
+                name: "redis",
+                tags: new[] { "ready" });                                             // chỉ chạy khi gọi /health/ready
 
         // 7. Dependency Injection
         builder.Services.AddHttpContextAccessor();
