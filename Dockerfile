@@ -4,7 +4,8 @@ ARG BUILD_CONFIGURATION=Release
 
 # Cài đặt các thư viện cần thiết cho Native AOT trên Linux
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang zlib1g-dev
+    clang zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
@@ -24,8 +25,8 @@ RUN dotnet publish "Dragon.Business.csproj" -c $BUILD_CONFIGURATION -o /app/publ
 # Tạo thư mục Data ngay tại giai đoạn Build (có shell)
 RUN mkdir -p /app/publish/Data
 
-# Giai đoạn Final (siêu nhẹ, không có shell)
-FROM mcr.microsoft.com/dotnet/nightly/runtime-deps:9.0-noble-chiseled AS final
+# Giai đoạn Final (stable, siêu nhẹ, không có shell)
+FROM mcr.microsoft.com/dotnet/runtime-deps:9.0-noble-chiseled AS final
 WORKDIR /app
 # --chown đảm bảo file/thư mục thuộc user app (1654) từ đầu
 COPY --from=build --chown=app:app /app/publish .
