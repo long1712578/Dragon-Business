@@ -301,7 +301,7 @@ public class CafeOrderService
                 var pUrl = reader.IsDBNull(2) ? null : reader.GetString(2);
                 var pProv = reader.GetString(3);
                 
-                // Nếu QR code tạo chưa quá 15 phút và chưa thanh toán -> Tái sử dụng (Idempotent Generate)
+                // Nếu QR code tạo chưa quá 15 phút và chưa thanh toán -> Tái sử dụng (Idempotent Generate) 
                 if (pStatus == 0 && (DateTime.UtcNow - pCreated).TotalMinutes < 15)
                 {
                     _logger.LogInformation("Re-using active Payment Session {PaymentId} for Order #{OrderId}", order.PaymentOrderId, orderId);
